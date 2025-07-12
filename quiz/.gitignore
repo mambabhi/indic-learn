@@ -20,7 +20,7 @@ flagged
 
 # data 
 data
-credentials
+backend/credentials/
 
 # Jupyter notebooks (if any)
 .ipynb_checkpoints/
