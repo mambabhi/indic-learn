@@ -11,6 +11,81 @@ from agno.models.groq import Groq
 class QuizParser:
     """Parses the quiz JSON out of the LLM's response."""
 
+    # def run(self, reply_text: str):
+    #     import re
+
+    #     # Extract JSON-ish content
+    #     first_index = min(reply_text.find("{"), reply_text.find("["))
+    #     last_index = max(reply_text.rfind("}"), reply_text.rfind("]")) + 1
+    #     json_portion = reply_text[first_index:last_index]
+
+    #     try:
+    #         quiz = json.loads(json_portion)
+    #     except json.JSONDecodeError:
+    #         quiz = json_repair.loads(json_portion)
+
+    #     # 🔽 NEW: Handle if `quiz` is a string after decoding (bad LLM output)
+    #     if isinstance(quiz, str):
+    #         try:
+    #             quiz = json.loads(quiz)
+    #         except json.JSONDecodeError:
+    #             quiz = json_repair.loads(quiz)
+
+    #     # 🔽 Support the new JSON format
+    #     if isinstance(quiz, dict) and "Quiz" in quiz:
+    #         quiz = quiz["Quiz"]
+
+    #     # 🔽 Support legacy format
+    #     questions = quiz.get("Questions") or quiz.get("questions", [])
+
+    #     for q in questions:
+    #         raw_options = q.get("Options") or q.get("options")
+
+    #         # Handle if options is a dictionary (malformed JSON case)
+    #         if isinstance(raw_options, dict):
+    #             raw_options = list(raw_options.values())
+    #         elif not isinstance(raw_options, list):
+    #             # Attempt to reconstruct options from key-value pairs
+    #             raw_options = []
+    #             for key, value in q.items():
+    #                 if key.lower() not in ("question", "right_option", "options", "question_type", "number_of_points_earned", "chapter", "timer", ):
+    #                     if isinstance(value, str):
+    #                         raw_options.append(key.strip())
+    #                         raw_options.append(value.strip())
+    #             # Remove those fields to clean up
+    #             for key in list(q.keys()):
+    #                 if key.lower() not in ("question", "right_option", "options", "question_type", "number_of_points_earned", "chapter", "timer", ):
+    #                     q.pop(key)
+
+    #         if not isinstance(raw_options, list):
+    #             raw_options = []
+
+    #         # Normalize options
+    #         normalized = []
+    #         seen = set()
+    #         for opt in raw_options:
+    #             if not isinstance(opt, str):
+    #                 continue
+    #             match = re.match(r"^[a-dA-D]\.\s+(.*)", opt.strip())
+    #             text = match.group(1).strip() if match else opt.strip()
+    #             if text not in seen:
+    #                 seen.add(text)
+    #                 normalized.append(text)
+
+    #         while len(normalized) < 4:
+    #             normalized.append("(missing option)")
+
+    #         normalized = normalized[:4]
+    #         labeled = [f"{label}. {text}" for label, text in zip("abcd", normalized)]
+    #         q["Options"] = labeled
+
+    #     # Ensure quiz is a dictionary before assigning "Questions"
+    #     if not isinstance(quiz, dict):
+    #         quiz = {"Questions": questions}
+    #     else:
+    #         quiz["Questions"] = questions
+
+    #     return quiz
     def run(self, reply_text: str):
         import re
 
@@ -24,37 +99,47 @@ class QuizParser:
         except json.JSONDecodeError:
             quiz = json_repair.loads(json_portion)
 
-        # 🔽 NEW: Handle if `quiz` is a string after decoding (bad LLM output)
+        # 🔽 Handle case where JSON loader returns a string (e.g., double-encoded JSON)
         if isinstance(quiz, str):
             try:
                 quiz = json.loads(quiz)
             except json.JSONDecodeError:
-                quiz = json_repair.loads(quiz)
+                try:
+                    quiz = json_repair.loads(quiz)
+                except Exception:
+                    print("⚠️ Could not parse quiz output, returning empty quiz.")
+                    return {"Questions": []}
 
-        # 🔽 Support the new JSON format
-        if "Quiz" in quiz:
+        # 🔽 Handle top-level "Quiz" key
+        if isinstance(quiz, dict) and "Quiz" in quiz:
             quiz = quiz["Quiz"]
 
-        questions = quiz.get("Questions") or quiz.get("questions", [])
+        # 🔽 If quiz is still not a dict, abort early
+        if not isinstance(quiz, dict):
+            print("⚠️ Parsed quiz is not a dict. Returning empty.")
+            return {"Questions": []}
 
+        questions = quiz.get("Questions") or quiz.get("questions", [])
+        if not isinstance(questions, list):
+            print("⚠️ 'Questions' is not a list. Returning empty.")
+            return {"Questions": []}
 
         for q in questions:
             raw_options = q.get("Options") or q.get("options")
 
-            # Handle if options is a dictionary (malformed JSON case)
+            # Handle if options is a dictionary (malformed)
             if isinstance(raw_options, dict):
                 raw_options = list(raw_options.values())
             elif not isinstance(raw_options, list):
-                # Attempt to reconstruct options from key-value pairs
+                # Try reconstructing from str fields
                 raw_options = []
                 for key, value in q.items():
-                    if key.lower() not in ("question", "right_option", "options", "question_type", "number_of_points_earned", "chapter", "timer", ):
+                    if key.lower() not in ("question", "right_option", "options", "question_type", "number_of_points_earned", "chapter", "timer"):
                         if isinstance(value, str):
                             raw_options.append(key.strip())
                             raw_options.append(value.strip())
-                # Remove those fields to clean up
                 for key in list(q.keys()):
-                    if key.lower() not in ("question", "right_option", "options", "question_type", "number_of_points_earned", "chapter", "timer", ):
+                    if key.lower() not in ("question", "right_option", "options", "question_type", "number_of_points_earned", "chapter", "timer"):
                         q.pop(key)
 
             if not isinstance(raw_options, list):
@@ -79,9 +164,8 @@ class QuizParser:
             labeled = [f"{label}. {text}" for label, text in zip("abcd", normalized)]
             q["Options"] = labeled
 
-        quiz["Questions"] = questions
-
-        return quiz
+        # Final safeguard: return normalized quiz
+        return {"Questions": questions}
 
 
 def build_english_quiz_agent(model_id: str) -> Agent:
@@ -222,32 +306,6 @@ def build_prompt(chapter_text: str, count: int, question_type: str) -> str:
     """
 
 
-def run_parallel_quiz(chapter_text: str, num_scq: int, num_mcq: int):
-    scq_agent = build_english_quiz_agent("llama3-70b-8192")
-    mcq_agent = build_english_quiz_agent("llama-3.3-70b-versatile")
-
-    parser = QuizParser()
-
-    with ThreadPoolExecutor() as executor:
-        f_scq = executor.submit(scq_agent.run, build_prompt(chapter_text, num_scq, "SCQ"))
-        r_scq = f_scq.result()
-
-        f_mcq = executor.submit(mcq_agent.run, build_prompt(chapter_text, num_mcq, "MCQ"))
-        r_mcq = f_mcq.result()
-
-    scq_data = parser.run(r_scq.content)
-    mcq_data = parser.run(r_mcq.content)
-
-    all_questions = scq_data.get("Questions", []) + mcq_data.get("Questions", [])
-
-    return {
-        "Quiz": {
-            "Topic": scq_data.get("Topic") or mcq_data.get("Topic", "Unknown Topic"),
-            "Questions": all_questions
-        }
-    }
-
-
 def is_valid_mcq_option(opt: str) -> bool:
     return bool(re.fullmatch(r"[a-d]{2,4}", opt))
 
@@ -263,22 +321,34 @@ def run_scq_only(chapter_text: str, num_scq: int):
     parser = QuizParser()
     scq_prompt = build_prompt(chapter_text, num_scq, "SCQ")
     r_scq = scq_agent.run(scq_prompt)
+    if r_scq.content is None:
+        raise ValueError("SCQ agent returned no content.")
     return parser.run(r_scq.content)
 
 
 def run_mcq_with_retries(chapter_text: str, num_mcq: int, max_retries: int = 3):
     mcq_agent = build_english_quiz_agent("llama-3.3-70b-versatile")
     mcq_prompt = build_prompt(chapter_text, num_mcq, "MCQ")  # Over-generate
-
     min_valid = max(1, num_mcq // 2)  # At least half (rounded down), but at least 1
 
     for attempt in range(max_retries):
         print(f"Running MCQ generation (Attempt {attempt + 1}/{max_retries})...")
         r_mcq = mcq_agent.run(mcq_prompt)
         parser = QuizParser()
+        if r_mcq.content is None:
+            raise ValueError("MCQ agent returned no content.")
+        
         mcq_data = parser.run(r_mcq.content)
-        mcq_questions = mcq_data.get("Questions", [])
+        if not mcq_data or not isinstance(mcq_data, dict):
+            print("🔎 Raw model output:")
+            print(r_mcq.content[:1000])  # print first 1000 characters
+            raise ValueError("MCQ parsing failed — got invalid format.")
 
+        if not mcq_data or not (isinstance(mcq_data, dict) and "Questions" in mcq_data):
+            print("❌ No questions found in MCQ response. Retrying...\n")
+            continue
+
+        mcq_questions = mcq_data.get("Questions", [])
         if validate_mcqs(mcq_questions, min_valid):
             print("✅ Enough valid MCQs found.")
             return mcq_data
@@ -337,7 +407,28 @@ def run_parallel_quiz_with_mcq_retry(chapter_text: str, num_questions: int):
     # Then slice to desired number
     mcq_questions = valid_mcq_questions[:num_mcq_to_pick]
 
+    total_collected = len(scq_questions) + len(mcq_questions)
+    remaining = num_questions - total_collected
+
+    if remaining > 0:
+        print(f"⚠️ Not enough valid MCQs. Filling remaining {remaining} with more SCQs...")
+
+        # Deduplicate SCQs already selected
+        selected_scq_texts = {normalize_text(q['Question']) for q in scq_questions}
+
+        extra_scqs = []
+        for q in scq_data.get("Questions", []):
+            norm_q = normalize_text(q['Question'])
+            if norm_q not in selected_scq_texts:
+                extra_scqs.append(q)
+                selected_scq_texts.add(norm_q)
+            if len(extra_scqs) >= remaining:
+                break
+
+        scq_questions += extra_scqs
+
     all_questions = scq_questions + mcq_questions
+    all_questions = all_questions[:num_questions]  # Just in case
 
     return {
         "Quiz": {
@@ -345,3 +436,4 @@ def run_parallel_quiz_with_mcq_retry(chapter_text: str, num_questions: int):
             "Questions": all_questions
         }
     }
+
