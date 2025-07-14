@@ -40,8 +40,8 @@ def quiz_json_to_dataframe(quiz_json: dict) -> pd.DataFrame:
     return pd.DataFrame(
         {
             "Chapter": q["Chapter"],
-            "Timer": q["Timer"],
-            "Points": q["Number_Of_Points_Earned"],
+            "Timer": q.get("Timer", 15 if q.get("Question_type", "").upper() == "SCQ" else 20),
+            "Points": q.get("Number_Of_Points_Earned", 10 if q.get("Question_type", "").upper() == "SCQ" else 15),
             "Type": "SCQ" if (q["Question_type"] == "MCQ" and len(q["Right_Option"].replace(" ", "")) == 1) else q["Question_type"],
             "Question": q["Question"].strip() + "?" if not q["Question"].strip().endswith("?") else q["Question"].strip(),
             "Option A": clean_option(q["Options"][0]) if len(q["Options"]) > 0 else "",
