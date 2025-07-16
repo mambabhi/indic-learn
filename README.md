@@ -86,14 +86,25 @@ Each chapter should be a separate tab. The layout within a tab should look like:
 
 ---
 
-🖼 **Screenshots**
+## 🧪 Screenshots (TODO)
 
-*Add screenshots here:*
+### ✅ Story Spreadsheet Tab (gurukula-story-master)
 
-* [ ] `gurukula-story-master` input format example
-* [ ] `gurukula-quiz-master` output with highlighted answers
-* [ ] Gurukula web app showing quiz rendering (flashcard-style or tabular view)
+<img src="assets/gurukula-story-master.png" alt="Story Master Screenshot" width="500"/>
+<br/>
+<i>Figure 1: Input spreadsheet with story content and number of questions.</i>
 
+### ✅ Generated Quiz Tab (gurukula-quiz-master)
+
+<img src="assets/gurukula-quiz-master.png" alt="Quiz Master Output" width="500"/>
+<br/>
+<i>Figure 2: Generated quiz questions with highlights in output sheet.</i>
+
+### ✅ Final Quiz in Gurukula App
+
+<img src="assets/gurukula-app-quiz.jpeg" alt="Gurukula Quiz App UI" width="500"/>
+<br/>
+<i>Figure 3: Gurukula app displaying quiz in interactive mode.</i>
 
 ---
 
@@ -133,28 +144,6 @@ Each chapter should be a separate tab. The layout within a tab should look like:
 * 📊 Google Sheets API (via `gspread`, `googleapiclient`)
 * 🐍 Python 3.11
 * ✅ Configurable with `YAML`-based settings
-
----
-
-## 🧪 Screenshots (TODO)
-
-### ✅ Story Spreadsheet Tab (gurukula-story-master)
-
-<img src="assets/gurukula-story-master.png" alt="Story Master Screenshot" width="500"/>
-<br/>
-<i>Figure 1: Input spreadsheet with story content and number of questions.</i>
-
-### ✅ Generated Quiz Tab (gurukula-quiz-master)
-
-<img src="assets/gurukula-quiz-master.png" alt="Quiz Master Output" width="500"/>
-<br/>
-<i>Figure 2: Generated quiz questions with highlights in output sheet.</i>
-
-### ✅ Final Quiz in Gurukula App
-
-<img src="assets/gurukula-app-quiz.jpeg" alt="Gurukula Quiz App UI" width="500"/>
-<br/>
-<i>Figure 3: Gurukula app displaying quiz in interactive mode.</i>
 
 ---
 
