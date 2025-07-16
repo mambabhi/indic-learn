@@ -86,7 +86,7 @@ Each chapter should be a separate tab. The layout within a tab should look like:
 
 ---
 
-## 🧪 Screenshots (TODO)
+## 🧪 Screenshots
 
 ### ✅ Story Spreadsheet Tab (gurukula-story-master)
 
