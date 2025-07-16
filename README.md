@@ -1,6 +1,99 @@
-# indic-learn/quiz module
+**`indic-learn`** is a modular AI-powered toolkit designed to support culturally grounded educational content for the Gurukula learning platform and other Indic institutions. Its first major module, `quiz`, is a fully automated pipeline for generating high-quality single and multiple-choice quizzes (SCQ and MCQ) from Indian story texts. Built for scale and precision, it leverages concurrent LLM agents (via Groq and Agno) to produce rich, classroom-ready assessments with minimal manual intervention.
 
-The `quiz` module iside `indic-learn` is a fully automated pipeline for generating high-quality single and multiple-choice quizzes (SCQ and MCQ) from Indian story texts, designed for the **Gurukula** learning platform. It uses modern LLMs (running via [Groq](https://groq.com)) to create engaging quiz content, optimized for classroom use by the **Indic** non-profit.
+Future modules coming soon include:
+
+* **`storyboard`** — frame-by-frame visual generation from story chapters for use in illustrated books and slide decks.
+* **`animation`** — culturally customized animated storytelling with rich textures and Indic design sensibilities.
+
+---
+
+📘 **Features of the `quiz` module**
+
+* Parallel SCQ and MCQ generation using dedicated Groq-hosted LLaMA3 agents via Agno.
+* Intelligent fallback strategy: if MCQ generation produces too few valid questions, SCQs are added to maintain the desired count.
+* Optional extra questions included for manual curation by Gurukula admins.
+* Automatic filtering of invalid or low-quality questions using format checks and semantic similarity deduplication.
+* Points and timers vary based on question difficulty and type.
+* All content written to a Google Sheet with per-chapter tabs for easy review and classroom use.
+* Correct answers are highlighted automatically via the Google Sheets API.
+
+---
+
+🛠 **Setup**
+
+You’ll need a `.env` and `config.yaml` file with the following (simplified for this README):
+
+```yaml
+# config.yaml
+spreadsheet:
+  name: gurukula-quiz-master
+input_spreadsheet:
+  name: gurukula-story-master
+chapter_question_counts:
+  chapter23: 20
+  chapter24: 15
+```
+
+```env
+SERVICE_ACCOUNT_FILE=path/to/google-service-key.json
+GOOGLE_SCOPES=https://www.googleapis.com/auth/spreadsheets
+```
+
+---
+
+🚀 **How to Run**
+
+All invocations use the main script: `backend/gurukula_quizgen.py`
+
+1. **Run a single chapter from file:**
+
+```bash
+python backend/gurukula_quizgen.py --input_source file --chapter chapter23
+```
+
+2. **Run all chapters in batch from file:**
+
+```bash
+python backend/gurukula_quizgen.py --input_source file
+```
+
+3. **Run from Google Sheets (single or multiple tabs):**
+
+```bash
+python backend/gurukula_quizgen.py --input_source spreadsheet
+```
+
+---
+
+🧾 **Input Sheet Format (`gurukula-story-master`)**
+
+Each chapter should be a separate tab. The layout within a tab should look like:
+
+| A            | B                                                               |
+| ------------ | --------------------------------------------------------------- |
+| NumQuestions | 15                                                              |
+| Content      | Once upon a time in a village... (full story content goes here) |
+
+📌 *Chapters without valid content or missing tabs are skipped automatically.*
+
+---
+
+📤 **Output Sheet Format (`gurukula-quiz-master`)**
+
+* Each chapter gets a tab with the generated questions.
+* SCQs and MCQs are mixed and randomized.
+* Correct options are highlighted in green.
+
+---
+
+🖼 **Screenshots**
+
+*Add screenshots here:*
+
+* [ ] `gurukula-story-master` input format example
+* [ ] `gurukula-quiz-master` output with highlighted answers
+* [ ] Gurukula web app showing quiz rendering (flashcard-style or tabular view)
+
 
 ---
 
@@ -31,60 +124,6 @@ The `quiz` module iside `indic-learn` is a fully automated pipeline for generati
 * Reads chapters directly from Google Sheets tabs
 * Writes quizzes to a separate output Google Sheet
 * Enables easy use by **Gurukula admins** via spreadsheets
-
----
-
-## 🚀 Usage
-
-There are **three main ways** to run the script:
-
-### 1. Run One Chapter from File Mode
-
-```bash
-python backend/gurukula_quizgen.py --input_source file --chapter chapter23
-```
-
-Reads from `data/chapter23.txt` and writes the output to the quiz spreadsheet.
-
-### 2. Run All Chapters from Files in Batch Mode
-
-```bash
-python backend/gurukula_quizgen.py --input_source file
-```
-
-Reads all `.txt` files from the `data/` folder.
-
-### 3. Run Chapters from Spreadsheet Tabs
-
-```bash
-python backend/gurukula_quizgen.py --input_source spreadsheet
-```
-
-Reads from a Google Sheet with tabs for each chapter. Each tab must have:
-
-```
-A1: NumQuestions     B1: <number>
-A2: Content          B2: <full chapter text>
-```
-
----
-
-## 📚 Sheet Configuration
-
-### Input Spreadsheet: `gurukula-story-master`
-
-* Each tab = one chapter
-* Format:
-
-  | A            | B                      |
-  | ------------ | ---------------------- |
-  | NumQuestions | 15                     |
-  | Content      | <long chapter content> |
-
-### Output Spreadsheet: `gurukula-quiz-master`
-
-* Each tab = one quiz for the chapter
-* Auto-formatted with colors and points
 
 ---
 
@@ -137,7 +176,15 @@ indic-learn/
 ---
 
 ## ✅ Coming Soon
+### Quiz module 
 
 * UI to configure and run quizzes without CLI
 * Analytics on question types per chapter
 * Export to CSV/HTML formats
+
+### Storyboard module 
+* Stay tuned...
+### Animation module 
+* Stay tuned...
+
+✨ Built with ❤️ for Indic education.
