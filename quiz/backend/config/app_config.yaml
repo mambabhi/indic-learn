@@ -1,9 +1,7 @@
-spreadsheet:
-  name: gurukula-master
+spreadsheets:
+  input_name: gurukula-story-master
+  output_name: gurukula-quiz-master
 
 chapter_question_counts:
-  chapter17: 20
-  chapter18: 15
-  chapter19: 10
-  chapter20: 10
-  chapter21: 10
+  chapter22: 20
+  chapter23: 15
