@@ -140,15 +140,21 @@ Each chapter should be a separate tab. The layout within a tab should look like:
 
 ### ✅ Story Spreadsheet Tab (gurukula-story-master)
 
-*Screenshot Placeholder*
+<img src="assets/gurukula-story-master.png" alt="Story Master Screenshot" width="500"/>
+<br/>
+<i>Figure 1: Input spreadsheet with story content and number of questions.</i>
 
 ### ✅ Generated Quiz Tab (gurukula-quiz-master)
 
-*Screenshot Placeholder*
+<img src="assets/gurukula-quiz-master.png" alt="Quiz Master Output" width="500"/>
+<br/>
+<i>Figure 2: Generated quiz questions with highlights in output sheet.</i>
 
 ### ✅ Final Quiz in Gurukula App
 
-*Screenshot Placeholder*
+<img src="assets/gurukula-app-quiz.jpeg" alt="Gurukula Quiz App UI" width="500"/>
+<br/>
+<i>Figure 3: Gurukula app displaying quiz in interactive mode.</i>
 
 ---
 
