@@ -17,4 +17,4 @@ def load_app_config(path="backend/config/app_config.yaml"):
         return yaml.safe_load(f)
 
 env_config = load_env_vars()
-app_config = load_app_config()
+app_config = load_app_config()  

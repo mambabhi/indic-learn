@@ -27,3 +27,4 @@ backend/credentials/
 
 # Logs
 *.log
+logs

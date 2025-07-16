@@ -4,22 +4,26 @@
 import os
 import argparse
 import re
+from typing import Tuple
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-from config import load_app_config
-
+from typing import Optional
 from dotenv import load_dotenv; load_dotenv()
 from config import env_config, app_config
 from indic_quiz_generator_pipeline import (
     run_parallel_quiz_with_mcq_retry,
 )
 from utils.gsheets import clear_all_sheet_formatting_only
+from utils.logging_utils import log_and_print
 
+
+# Load environment variables and app config
 SERVICE_ACCOUNT_FILE = env_config["SERVICE_ACCOUNT_FILE"]
 GOOGLE_SCOPES = env_config["GOOGLE_SCOPES"]
-SPREADSHEET_NAME = app_config["spreadsheet"]["name"]
+INPUT_SPREADSHEET_NAME = app_config["spreadsheets"]["input_name"]
+OUTPUT_SPREADSHEET_NAME = app_config["spreadsheets"]["output_name"]
 
 # ======== STEP 1: Run Agent and Get JSON ========
 def generate_quiz_json(chapter_text: str, num_questions: int = 15) -> dict:
@@ -58,7 +62,7 @@ def upload_to_sheet(df: pd.DataFrame, chapter_title: str):
     creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=GOOGLE_SCOPES)
     client = gspread.authorize(creds)
 
-    spreadsheet = client.open(SPREADSHEET_NAME)
+    spreadsheet = client.open(OUTPUT_SPREADSHEET_NAME)
 
     # Check if sheet with chapter_title exists, else create it
     try:
@@ -133,17 +137,69 @@ def apply_conditional_formatting(spreadsheet_id: str, chapter_title: str, df: pd
 
     print("✅ Correct options highlighted in green.")
 
+# ======== SRead Chapter Text from Spreadsheet ========
+def read_chapter_text_from_sheet(chapter_title: str) -> Tuple[str, int]:
+    creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=GOOGLE_SCOPES)
+    client = gspread.authorize(creds)
+    spreadsheet = client.open(INPUT_SPREADSHEET_NAME)
+
+    try:
+        worksheet = spreadsheet.worksheet(chapter_title)
+
+        key_row = worksheet.col_values(1)[:2]  # A1, A2
+        val_row = worksheet.col_values(2)[:2]  # B1, B2
+
+        metadata = dict(zip(key_row, val_row))
+
+        if "Content" not in metadata:
+            raise ValueError(f"❌ Missing 'Content' key (A2) in sheet '{chapter_title}'.")
+
+        content_val = metadata.get("Content")
+        if content_val is None:
+            raise ValueError(f"❌ 'Content' value is missing in sheet '{chapter_title}'.")
+        
+        chapter_text = str(content_val).strip()
+        try:
+            num_questions_val = metadata.get("NumQuestions")
+            if num_questions_val is None:
+                num_questions = 15
+                print(f"⚠️ Warning: 'NumQuestions' was not provided in sheet '{chapter_title}', defaulting to 15.")
+            else:
+                num_questions = int(num_questions_val)
+        except ValueError:
+            print(f"⚠️ Warning: 'NumQuestions' is not a valid number in sheet '{chapter_title}', defaulting to 15.")
+            num_questions = 15
+
+        return chapter_text, num_questions
+
+    except gspread.exceptions.WorksheetNotFound:
+        raise ValueError(f"❌ Chapter tab '{chapter_title}' not found in input spreadsheet.")
+
+
 # ======== MAIN PIPELINE FUNCTION ========
 
+# This function processes a single chapter either from a file or a spreadsheet
+# It reads the chapter text, generates the quiz JSON, converts it to a DataFrame,
+# uploads it to a Google Sheet, and applies conditional formatting.
+# It returns the spreadsheet ID for further use if needed.
+
 def process_chapter_to_sheet(
-    chapter_path: str,
+    chapter_path: Optional[str],
     chapter_title: str,
-    num_questions: int,
-    quiz_generator_fn=generate_quiz_json
+    num_questions: Optional[int],
+    input_source: str,
+    quiz_generator_fn=generate_quiz_json,
 ):
-    print(f"📘 Reading File: {chapter_path} ...")
-    with open(chapter_path, "r", encoding="utf-8") as f:
-        chapter_text = f.read()
+    if input_source == "spreadsheet":
+        print(f"📘 Reading from spreadsheet: {chapter_title}")
+        (chapter_text, num_questions) = read_chapter_text_from_sheet(chapter_title)
+    elif input_source == "file":
+        print(f"📘 Reading from file: {chapter_path}")
+        assert chapter_path is not None, "chapter_path must not be None when input_source is 'file'"
+        with open(chapter_path, "r", encoding="utf-8") as f:
+            chapter_text = f.read()
+    else:
+        raise ValueError("Invalid input source. Use 'spreadsheet' or 'file'.")
 
     print(f"📘 Processing: {chapter_title} with {num_questions} questions...")
     quiz_json = quiz_generator_fn(chapter_text, num_questions)
@@ -158,41 +214,69 @@ def process_chapter_to_sheet(
     return spreadsheet_id  # Optional return
 
 # ======== Processing Single Chapter ========
-def run_single_quiz_pipeline(chapter_title: str, ):
-    # get the chapter counts from the app_config YAML
-    num_questions = app_config.get("chapter_question_counts", {}).get(chapter_title, 15)  # fallback to 15
+def run_single_quiz_pipeline(chapter_title: str, input_source: str):
+    data_folder = "data"
 
-    if not num_questions:
-        raise ValueError(f"Chapter '{chapter_title}' not found in app config.")
+    if input_source == "file":
+        # get the chapter counts from the app_config YAML
+        num_questions = app_config.get("chapter_question_counts", {}).get(chapter_title, 15)  # fallback to 15
 
-    chapter_path = f"data/{chapter_title}.txt"
-    if not os.path.exists(chapter_path):
-        raise FileNotFoundError(f"No such chapter text file: {chapter_path}")
+        if not num_questions:
+            raise ValueError(f"Chapter '{chapter_title}' not found in app config.")
 
-    process_chapter_to_sheet(chapter_path, chapter_title, num_questions)
+        chapter_path = f"{data_folder}/{chapter_title}.txt"
+        if not os.path.exists(chapter_path):
+            raise FileNotFoundError(f"No such chapter text file: {chapter_path}")
+        process_chapter_to_sheet(chapter_path, chapter_title, num_questions, input_source)
+    else:  # spreadsheet
+        process_chapter_to_sheet(None, chapter_title, None, input_source)
 
 # ======== Processing Chapters in Batch ========
-def run_batch_quiz_pipeline():
-    app_config = load_app_config()
-    data_folder = "data"
-    quiz_counts = app_config.get("chapter_question_counts", {})
+def run_batch_quiz_pipeline(input_source: str):        
+    if input_source == "file":
+        data_folder = "data"
+        quiz_counts = app_config.get("chapter_question_counts", {})
+        for filename in os.listdir(data_folder):
+            if filename.endswith(".txt"):
+                chapter_path = os.path.join(data_folder, filename)
+                chapter_title = filename.replace(".txt", "").strip()
+                num_questions = quiz_counts.get(chapter_title.lower(), 15)
+                process_chapter_to_sheet(chapter_path, chapter_title, num_questions, input_source)
+    elif input_source == "spreadsheet":  # spreadsheet
+        # ===== Get all sheet/tab names from input spreadsheet =====
+        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=GOOGLE_SCOPES)
+        client = gspread.authorize(creds)
+        spreadsheet = client.open(INPUT_SPREADSHEET_NAME)
 
-    for filename in os.listdir(data_folder):
-        if filename.endswith(".txt"):
-            filepath = os.path.join(data_folder, filename)
-            chapter_title = filename.replace(".txt", "").replace("data/", "").strip()
+        sheet_list = spreadsheet.worksheets()
+        chapter_titles = [sheet.title for sheet in sheet_list]
 
-            num_questions = quiz_counts.get(chapter_title.lower(), 15)  # default to 15 if not found
+        for chapter_title in chapter_titles:
+            process_chapter_to_sheet(None, chapter_title, None, input_source)
+    else:
+        raise ValueError("Invalid input source. Use 'spreadsheet' or 'file'.")
 
-            process_chapter_to_sheet(filepath, chapter_title, num_questions)
-
+# ======== Main ========
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run quiz pipeline for Gurukula content.")
-    parser.add_argument("--chapter", type=str, help="Run quiz generation for a specific chapter (e.g. 'chapter16')")
+    parser.add_argument(
+        "--input_source",
+        type=str,
+        choices=["spreadsheet", "file"],
+        required=True,
+        help="Where to read the chapter text from: 'spreadsheet' or 'file'"
+    )
+    parser.add_argument(
+        "--chapter",
+        type=str,
+        help="Run quiz generation for a specific chapter (e.g. 'chapter16')"
+    )
 
     args = parser.parse_args()
 
     if args.chapter:
-        run_single_quiz_pipeline(args.chapter)
+        run_single_quiz_pipeline(args.chapter, input_source=args.input_source)
     else:
-        run_batch_quiz_pipeline()
+        run_batch_quiz_pipeline(input_source=args.input_source)
+
+    log_and_print("Quiz generation pipeline started.")
