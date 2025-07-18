@@ -57,7 +57,13 @@ python backend/gurukula_quizgen.py --input_source file --chapter chapter23
 python backend/gurukula_quizgen.py --input_source file
 ```
 
-3. **Run from Google Sheets (single or multiple tabs):**
+3. **Run a single chapter from Google Sheets:**
+
+```bash
+python backend/gurukula_quizgen.py --input_source spreadsheet --chapter chapter23
+```
+
+4. **Run from Google Sheets (single or multiple tabs):**
 
 ```bash
 python backend/gurukula_quizgen.py --input_source spreadsheet
