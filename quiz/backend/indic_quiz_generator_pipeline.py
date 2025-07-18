@@ -61,12 +61,12 @@ class QuizParser:
                 # Try reconstructing from str fields
                 raw_options = []
                 for key, value in q.items():
-                    if key.lower() not in ("question", "right_option", "options", "question_type", "number_of_points_earned", "chapter", "timer"):
+                    if key.lower() not in ("question", "right_option", "options", "question_type", "number_of_points_earned",  "timer"):
                         if isinstance(value, str):
                             raw_options.append(key.strip())
                             raw_options.append(value.strip())
                 for key in list(q.keys()):
-                    if key.lower() not in ("question", "right_option", "options", "question_type", "number_of_points_earned", "chapter", "timer"):
+                    if key.lower() not in ("question", "right_option", "options", "question_type", "number_of_points_earned",  "timer"):
                         q.pop(key)
 
             if not isinstance(raw_options, list):
@@ -117,7 +117,6 @@ def get_example_block(question_type: str) -> str:
                 "Options": ["a. To protect the newborn Kṛiṣhṇa", "b. To kill the newborn Kṛiṣhṇa", "c. To find the newborn Kṛiṣhṇa and bring him to Kaṃsa", "d. To alert the people of Gokula about Kaṃsa's plans"],
                 "Right_Option": "c",
                 "Number_Of_Points_Earned": 10,
-                "Chapter": "Chapter 16",
                 "Timer": 15
             }
         ]
@@ -136,7 +135,6 @@ def get_example_block(question_type: str) -> str:
                 "Options": ["a. The cart was dislodged and flew away", "b. The cart was destroyed", "c. The metal jars containing milk and curd were crushed", "d. The cart's pole was shattered"],
                 "Right_Option": "abcd",
                 "Number_Of_Points_Earned": 15,
-                "Chapter": "Chapter 16",
                 "Timer": 20
             },
             {
@@ -150,7 +148,6 @@ def get_example_block(question_type: str) -> str:
                 ],
                 "Right_Option": "ab",
                 "Number_Of_Points_Earned": 15,
-                "Chapter": "Chapter 17",
                 "Timer": 25
             }
         ]
@@ -205,7 +202,6 @@ def build_prompt(chapter_text: str, count: int, question_type: str) -> str:
         - "Right_Option":   
         - {right_option_clause}
         - "Number_Of_Points_Earned": "{points_clause}"
-        - "Chapter": e.g. "Chapter 1"
         - "Timer": an integer with any one of these values -- 10,15,20,25,30 -- depending on difficulty
 
         == RULES ==
