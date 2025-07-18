@@ -39,11 +39,13 @@ def generate_quiz_json(chapter_text: str, num_questions: int = 15) -> dict:
 def clean_option(opt: str) -> str:
     return re.sub(r'^[a-d]\.\s*', '', opt.strip(), flags=re.IGNORECASE)
 
-def quiz_json_to_dataframe(quiz_json: dict) -> pd.DataFrame:
+def quiz_json_to_dataframe(chapter_title: str, quiz_json: dict, num_questions: int) -> pd.DataFrame:
     questions = quiz_json['Questions']
-    return pd.DataFrame(
+
+    # Create full DataFrame (no shuffling yet)
+    full_df = pd.DataFrame(
         {
-            "Chapter": q["Chapter"],
+            "Chapter": re.sub(r'chapter(\d+)', r'Chapter \1', chapter_title, flags=re.IGNORECASE),
             "Timer": q.get("Timer", 15 if q.get("Question_type", "").upper() == "SCQ" else 20),
             "Points": q.get("Number_Of_Points_Earned", 10 if q.get("Question_type", "").upper() == "SCQ" else 15),
             "Type": "SCQ" if (q["Question_type"] == "MCQ" and len(q["Right_Option"].replace(" ", "")) == 1) else q["Question_type"],
@@ -55,7 +57,33 @@ def quiz_json_to_dataframe(quiz_json: dict) -> pd.DataFrame:
             "Right Answer": q["Right_Option"].replace(" ", "").lower()
         }
         for q in questions
-    ).sample(frac=1, random_state=42).reset_index(drop=True)
+    )
+
+    # Separate main and backup questions
+    if len(full_df) > num_questions:
+        df_main = full_df.iloc[:num_questions].sample(frac=1, random_state=42).reset_index(drop=True)
+        df_backup = full_df.iloc[num_questions:].reset_index(drop=True)
+
+        # Insert note row between main and backup
+        note_row = {
+            "Chapter": "The following questions are optional backups in case any of the questions above are not usable.",
+            "Timer": "",
+            "Points": "",
+            "Type": "",
+            "Question": "",
+            "Option A": "",
+            "Option B": "",
+            "Option C": "",
+            "Option D": "",
+            "Right Answer": ""
+        }
+
+        df = pd.concat([df_main, pd.DataFrame([note_row]), df_backup], ignore_index=True)
+    else:
+        df = full_df.sample(frac=1, random_state=42).reset_index(drop=True)
+
+    return df
+    
 
 # ======== STEP 3: Upload to Google Sheet ========
 def upload_to_sheet(df: pd.DataFrame, chapter_title: str):
@@ -127,6 +155,31 @@ def apply_conditional_formatting(spreadsheet_id: str, chapter_title: str, df: pd
                         "fields": "userEnteredFormat.backgroundColor"
                     }
                 })
+    
+    # Highlight the backup note row (The following...) in red background across columns A–F
+    for i, row in enumerate(df.itertuples(index=False), start=1):
+        if isinstance(row[0], str) and row[0].strip().startswith("The following"):
+            requests.append({
+                "repeatCell": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": i,
+                        "endRowIndex": i + 1,
+                        "startColumnIndex": 0,  # Column A
+                        "endColumnIndex": 6     # Column F (non-inclusive index)
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "backgroundColor": {
+                                "red": 1.0,
+                                "green": 0.8,
+                                "blue": 0.8
+                            }
+                        }
+                    },
+                    "fields": "userEnteredFormat.backgroundColor"
+                }
+            })
 
     # Send all formatting updates in one batch
     if requests:
@@ -205,7 +258,7 @@ def process_chapter_to_sheet(
     quiz_json = quiz_generator_fn(chapter_text, num_questions)
     print(f"✅ Quiz Generated: {chapter_title}")
 
-    df = quiz_json_to_dataframe(quiz_json)
+    df = quiz_json_to_dataframe(chapter_title, quiz_json, num_questions if num_questions is not None else 15)
 
     spreadsheet_id, creds = upload_to_sheet(df, chapter_title)
     apply_conditional_formatting(spreadsheet_id, chapter_title, df, creds)
