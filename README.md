@@ -1,3 +1,7 @@
+<p align="left">
+  <img src="assets/gurukula-logo.png" alt="Gurukula Logo" width="50"/>
+</p>
+
 **`indic-learn`** is a modular AI-powered toolkit designed to support culturally grounded educational content for the Gurukula learning platform. Its first major module, `quiz`, is a fully automated pipeline for generating high-quality single and multiple-choice quizzes (SCQ and MCQ) from Indian story texts. Built for scale and precision, it leverages concurrent LLM agents (via Groq and Agno) to produce rich, classroom-ready assessments with minimal manual intervention.
 
 Future modules coming soon include:
@@ -189,3 +193,8 @@ indic-learn/
 * Stay tuned...
 
 ✨ Built with ❤️ for Indic education.
+
+---
+
+© 2025 [Gurukula](https://gurukula.com). All rights reserved.  
+This project is maintained in partnership with the Gurukula learning platform.
