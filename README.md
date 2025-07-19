@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <p align="left">
   <img src="assets/gurukula-logo.png" alt="Gurukula Logo" width="50"/>
 </p>
@@ -198,3 +199,17 @@ indic-learn/
 
 © 2025 [Gurukula](https://gurukula.com). All rights reserved.  
 This project is maintained in partnership with the Gurukula learning platform.
+=======
+---
+title: Indic Learn
+emoji: 🏆
+colorFrom: red
+colorTo: blue
+sdk: gradio
+sdk_version: 5.38.0
+app_file: app.py
+pinned: false
+---
+
+Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
+>>>>>>> 742ca3b0efc4148d04a9933d4bf85fae924ec6c7
