@@ -1,5 +1,6 @@
 # Python
 venv/
+.venv/
 __pycache__/
 *.py[cod]
 *.pyo
@@ -20,7 +21,7 @@ flagged
 
 # data 
 data
-backend/credentials/
+quiz/backend/credentials/
 
 # Jupyter notebooks (if any)
 .ipynb_checkpoints/

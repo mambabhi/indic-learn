@@ -12,7 +12,7 @@ def load_env_vars():
         "GOOGLE_SCOPES": os.getenv("GOOGLE_SCOPES", "").split(","),
     }
 
-def load_app_config(path="backend/config/app_config.yaml"):
+def load_app_config(path="quiz/backend/config/app_config.yaml"):
     with open(path, "r") as f:
         return yaml.safe_load(f)
 

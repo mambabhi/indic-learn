@@ -1,15 +1,31 @@
 import sys
 import os
+import tempfile
 import re
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
 
 import gradio as gr
-from backend.gurukula_quizgen import process_chapter_to_sheet
+from quiz.backend.gurukula_quizgen import process_chapter_to_sheet
 import gspread
 from google.oauth2.service_account import Credentials
 import datetime
 from dotenv import load_dotenv; load_dotenv()
-from backend.config import env_config
+from quiz.backend.config import env_config
+
+load_dotenv()  
+
+# 1. Store your service account JSON securely as a multiline string or from HF secret
+GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")  # e.g. from Hugging Face secret
+
+# 2. Write to a temporary file
+if GOOGLE_SERVICE_ACCOUNT_JSON:
+    temp_cred = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
+    temp_cred.write(GOOGLE_SERVICE_ACCOUNT_JSON.encode("utf-8"))
+    temp_cred.close()
+
+    # 3. Set the env var before config loads
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_cred.name
+    os.environ["GOOGLE_SCOPES"] = "https://www.googleapis.com/auth/spreadsheets"
 
 # Config
 SERVICE_ACCOUNT_FILE = env_config["SERVICE_ACCOUNT_FILE"]
@@ -103,7 +119,10 @@ with gr.Blocks(title="Gurukula Admin Portal") as demo:
             input_link = gr.Textbox(label="Input Spreadsheet URL", placeholder="https://docs.google.com/...")
             output_link = gr.Textbox(label="Output Spreadsheet URL", placeholder="https://docs.google.com/...")
             specific_chapter = gr.Textbox(label="Process Only This Chapter (Optional)")
-            chapter_list = gr.Textbox(label="Or List of Chapters (comma separated)", placeholder="chapter1, chapter2")
+            chapter_list = gr.Textbox(
+                label="List of Chapters (comma-separated) – optional but recommended (runs first 6 if left blank)", 
+                placeholder="chapter1, chapter2"
+            )
 
             run_button = gr.Button("Generate Quiz")
             output_text = gr.Textbox(label="Status", lines=1, interactive=False)

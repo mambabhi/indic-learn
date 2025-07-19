@@ -11,12 +11,12 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from typing import Optional
 from dotenv import load_dotenv; load_dotenv()
-from backend.config import env_config, app_config
-from backend.indic_quiz_generator_pipeline import (
+from quiz.backend.config import env_config, app_config
+from quiz.backend.indic_quiz_generator_pipeline import (
     run_parallel_quiz_with_mcq_retry,
 )
-from backend.utils.gsheets import clear_all_sheet_formatting_only
-from backend.utils.logging_utils import log_and_print
+from quiz.backend.utils.gsheets import clear_all_sheet_formatting_only
+from quiz.backend.utils.logging_utils import log_and_print
 
 
 # Load environment variables and app config

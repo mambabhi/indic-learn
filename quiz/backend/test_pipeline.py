@@ -2,8 +2,10 @@
 # -*- coding: utf-8 -*-
 
 from dotenv import load_dotenv; load_dotenv()
-from pprint import pprint
-from indic_quiz_generator_pipeline import build_english_quiz_agent, build_prompt, QuizParser
+# from pprint import pprint
+# from quiz.backend.indic_quiz_generator_pipeline import build_english_quiz_agent, build_prompt, QuizParser
+from quiz.backend.gurukula_quizgen import generate_quiz_json
+from quiz.backend.utils.logging_utils import log_and_print
 
 # Input
 chapter_text = """
@@ -36,14 +38,22 @@ While everyone was distracted by the whirlwind, Tṛṇāvarta had carried Kṛi
 The whirlwind stopped. Everyone rushed to the dead Asura and found little Kṛiṣhṇa hanging onto his chest. They took the child and handed him to Yaśhodā. No one in Gokula knew how the Asura landed there. Or how he died. But they were delighted that their beloved child was safe. Little did they know that it was Kṛiṣhṇa who had brought an end to yet another Asura.
  """
 
-final_prompt = build_prompt(chapter_text, count=15, question_type="MCQ")
+# final_prompt = build_prompt(chapter_text, count=15, question_type="MCQ")
 
-english_quiz_agent = build_english_quiz_agent("llama3-70b-8192")
+# english_quiz_agent = build_english_quiz_agent("llama3-70b-8192")
 
-# Get the response
-response = english_quiz_agent.run(final_prompt)
+# # Get the response
+# response = english_quiz_agent.run(final_prompt)
 
-parser = QuizParser()
+# parser = QuizParser()
 
-english_quiz_text = parser.run(response.content if response.content is not None else "")
-pprint(english_quiz_text)
+# english_quiz_text = parser.run(response.content if response.content is not None else "")
+# pprint(english_quiz_text)
+
+print("Generate Quiz")
+
+print(generate_quiz_json(chapter_text))
+
+print("Generated the Quiz")
+
+log_and_print("Test pipeline executed successfully")
