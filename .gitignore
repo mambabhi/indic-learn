@@ -22,6 +22,7 @@ flagged
 # data 
 data
 quiz/backend/credentials/
+assets/
 
 # Jupyter notebooks (if any)
 .ipynb_checkpoints/
