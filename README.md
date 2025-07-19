@@ -1,4 +1,13 @@
-<<<<<<< HEAD
+---
+title: Indic-Learn App  # Give your Space a nice title
+emoji: 📚 # You can pick any emoji that fits
+colorFrom: purple # Adjust colors as you like
+colorTo: indigo # Adjust colors as you like
+sdk: gradio # IMPORTANT: Change this if you're using Streamlit, Docker, or another SDK
+app_file: app.py # IMPORTANT: Change this to the name of your main application file (e.g., main.py, gradio_app.py)
+pinned: false
+---
+
 <p align="left">
   <img src="assets/gurukula-logo.png" alt="Gurukula Logo" width="50"/>
 </p>
@@ -199,17 +208,3 @@ indic-learn/
 
 © 2025 [Gurukula](https://gurukula.com). All rights reserved.  
 This project is maintained in partnership with the Gurukula learning platform.
-=======
----
-title: Indic Learn
-emoji: 🏆
-colorFrom: red
-colorTo: blue
-sdk: gradio
-sdk_version: 5.38.0
-app_file: app.py
-pinned: false
----
-
-Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
->>>>>>> 742ca3b0efc4148d04a9933d4bf85fae924ec6c7
