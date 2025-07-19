@@ -22,6 +22,8 @@ if GOOGLE_SERVICE_ACCOUNT_JSON:
     temp_cred.close()
 
     # 3. Set the env var before config loads
+    print("Temp Cred:", temp_cred.name)
+
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_cred.name
     os.environ["GOOGLE_SCOPES"] = "https://www.googleapis.com/auth/spreadsheets"
 
@@ -33,6 +35,9 @@ app_config = load_app_config()
 # 5. Extract config values
 SERVICE_ACCOUNT_FILE = env_config["SERVICE_ACCOUNT_FILE"]
 GOOGLE_SCOPES = env_config["GOOGLE_SCOPES"]
+
+print("GOOGLE_APPLICATION_CREDENTIALS =", os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+print("SERVICE_ACCOUNT_FILE =", SERVICE_ACCOUNT_FILE)
 
 # Track processed chapters per session
 processed_today = []
