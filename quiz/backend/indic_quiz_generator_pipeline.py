@@ -7,7 +7,7 @@ import json
 import json_repair
 from agno.agent import Agent
 from agno.models.groq import Groq
-from utils.logging_utils import log_and_print
+from backend.utils.logging_utils import log_and_print
 
 
 class QuizParser:

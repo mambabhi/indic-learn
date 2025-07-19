@@ -1,218 +1,125 @@
 import sys
 import os
-
-# 👇 Add parent directory to Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import re
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
 
 import gradio as gr
-from backend.indic_quiz_generator_pipeline import build_english_quiz_agent, build_quiz_prompt, QuizParser
+from backend.gurukula_quizgen import process_chapter_to_sheet
+import gspread
+from google.oauth2.service_account import Credentials
+import datetime
 from dotenv import load_dotenv; load_dotenv()
+from backend.config import env_config
 
-english_quiz_agent = build_english_quiz_agent()
-parser = QuizParser()
+# Config
+SERVICE_ACCOUNT_FILE = env_config["SERVICE_ACCOUNT_FILE"]
+GOOGLE_SCOPES = env_config["GOOGLE_SCOPES"]
 
-quiz_data = {"questions": [], "index": 0, "answers": [], "last_selected": None}
+# Track processed chapters per session
+processed_today = []
 
-def generate_quiz(topic, story):
-    final_prompt = build_quiz_prompt(story, num_questions=15)
+def is_valid_gsheet_url(url: str) -> bool:
+    return (
+        isinstance(url, str)
+        and url.startswith("https://docs.google.com/")
+        and "/spreadsheets/" in url
+        and len(url.strip()) > 40
+    )
 
+def extract_sheet_id(url: str) -> str:
     try:
-        english_quiz = english_quiz_agent.run(final_prompt)
+        return url.split("/d/")[1].split("/")[0]
+    except IndexError:
+        return ""
+
+def is_valid_chapter_list(chapter_list: str) -> bool:
+    chapters = [c.strip() for c in chapter_list.split(",") if c.strip()]
+    return all(re.fullmatch(r"[A-Za-z0-9]+", c) for c in chapters)
+
+def get_all_chapters(spreadsheet_url):
+    try:
+        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=GOOGLE_SCOPES)
+        client = gspread.authorize(creds)
+        sheet = client.open_by_url(spreadsheet_url)
+        return [ws.title for ws in sheet.worksheets()]
     except Exception as e:
-        return (
-            gr.update(visible=True),  # input_form
-            gr.update(visible=False),  # flashcard
-            gr.update(value=f"Error: {str(e)}"),  # question_text
-            gr.update(visible=False),  # radio
-            gr.update(visible=False),  # checkbox
-            gr.update(visible=False),  # mcq_submit_btn
-            gr.update(value=""),  # feedback
-            gr.update(visible=False),  # flip
-            gr.update(visible=False)  # next
-        )
+        return f"❌ Failed to read spreadsheet: {str(e)}"
 
-    english_quiz_text = parser.run(english_quiz.content)
-    quiz_data["questions"] = english_quiz_text["Questions"]
-    quiz_data["index"] = 0
-    quiz_data["answers"] = []
-    quiz_data["last_selected"] = None
+def generate_quiz(input_link, output_link, specific_chapter, chapter_list, progress=gr.Progress()):
+    global processed_today
+    logs = []
 
-    return render_question(0)
+    # --- Validation ---
+    if not is_valid_gsheet_url(input_link):
+        return "❌ Invalid Input Spreadsheet URL. Please provide a valid Google Sheets link.", logs
+    if not is_valid_gsheet_url(output_link):
+        return "❌ Invalid Output Spreadsheet URL. Please provide a valid Google Sheets link.", logs
+    if extract_sheet_id(input_link) == extract_sheet_id(output_link):
+        return "❌ Input and Output Spreadsheet URLs must be different.", logs
 
-def render_question(index):
-    q = quiz_data["questions"][index]
-    question = f"**Question {index+1} of {len(quiz_data['questions'])}:**\n" + q["Question"]
-    options = q["Options"]
-    qtype = q["Question_type"].upper()
+    if chapter_list and not is_valid_chapter_list(chapter_list):
+        return "❌ Invalid chapter list. Use only alphanumeric names, separated by commas (e.g., chapter1, chapter2).", logs
 
-    quiz_data["last_selected"] = None
-
-    if qtype == "SCQ":
-        return (
-            gr.update(visible=False),  # input_form
-            gr.update(visible=True),  # flashcard
-            gr.update(value=question),  # question_text
-            gr.update(choices=options, value=None, visible=True, interactive=True),  # radio
-            gr.update(choices=[], value=None, visible=False),  # checkbox
-            gr.update(visible=False),  # mcq_submit_btn
-            gr.update(value=""),  # feedback
-            gr.update(visible=False),  # flip
-            gr.update(visible=True)  # next
-        )
-    else:  # MCQ
-        return (
-            gr.update(visible=False),
-            gr.update(visible=True),
-            gr.update(value=question),
-            gr.update(choices=[], value=None, visible=False),  # radio
-            gr.update(choices=options, value=None, visible=True, interactive=True),  # checkbox
-            gr.update(visible=True),  # mcq_submit_btn
-            gr.update(value=""),
-            gr.update(visible=False),
-            gr.update(visible=False)
-        )
-
-def submit_scq(option):
-    if option is None:
-        return gr.update(), "⚠️ Please select an option. Or, flip to reveal the answer.", gr.update(visible=False)
-
-    quiz_data["last_selected"] = option
-    current_q = quiz_data["questions"][quiz_data["index"]]
-    correct = current_q["Right_Option"].lower()
-    selected = option[0].lower()
-
-    if selected == correct:
-        feedback = f"✅ Correct! The answer is: {option}"
+    chapters = []
+    if specific_chapter:
+        chapters = [specific_chapter.strip()]
+    elif chapter_list:
+        chapters = [c.strip() for c in chapter_list.split(",") if c.strip()]
     else:
-        feedback = f"❌ Incorrect. You chose: {option}"
+        result = get_all_chapters(input_link)
+        if isinstance(result, str):  # error
+            return result, logs
+        chapters = result
 
-    return gr.update(interactive=False), feedback, gr.update(visible=True)
+    today = datetime.date.today()
+    if len(processed_today) >= 6:
+        return "⚠️ Daily limit of 6 chapters reached.", logs
 
-def submit_mcq(selected_options):
-    if not selected_options:
-        return (
-            gr.update(),  # leave checkbox state unchanged
-            "⚠️ Please select at least one option.",
-            gr.update(visible=False),
-            gr.update(visible=False)
-        )
+    count_to_process = min(6 - len(processed_today), len(chapters))
+    chapters = chapters[:count_to_process]
 
-    quiz_data["last_selected"] = selected_options
-    current_q = quiz_data["questions"][quiz_data["index"]]
-    correct_letters = set(current_q["Right_Option"].lower())
-    selected_letters = set(opt[0].lower() for opt in selected_options)
+    progress(0)
+    for i, chapter in enumerate(chapters):
+        try:
+            logs.append(f"📘 Processing {chapter}...")
+            spreadsheet_id = process_chapter_to_sheet(None, chapter, None, "spreadsheet")
+            logs.append(f"✅ Completed: {chapter} → Sheet ID: {spreadsheet_id}")
+            processed_today.append((chapter, today))
+        except Exception as e:
+            logs.append(f"❌ Error processing {chapter}: {str(e)}")
+        progress((i + 1) / count_to_process)
 
-    if selected_letters == correct_letters:
-        feedback = f"✅ Correct! The answer(s): {', '.join(selected_options)}"
-    else:
-        feedback = f"❌ Incorrect. You chose: {', '.join(selected_options)}"
+    return f"✅ {len(chapters)} chapter(s) processed successfully.", logs
 
-    return (
-        gr.update(interactive=False),  # disable MCQ checkboxes
-        feedback,
-        gr.update(visible=True),  # flip button
-        gr.update(visible=True)   # next question button
-    )
+# ======================
+# Gradio UI
+# ======================
+with gr.Blocks(title="Gurukula Admin Portal") as demo:
+    with gr.Tabs():
+        with gr.Tab("Quiz Generator"):
+            gr.Markdown("### ✍️ Generate Quiz from Indic Story Chapters")
+            gr.Markdown("ℹ️ **Note:** If no specific chapters are entered, the first 6 chapters from the input spreadsheet will be processed.")
 
-def flip_to_show_answer():
-    current_q = quiz_data["questions"][quiz_data["index"]]
-    correct_letters = set(current_q["Right_Option"].lower())
-    correct_options = [
-        opt for opt in current_q["Options"] if opt[0].lower() in correct_letters
-    ]
-    return gr.update(value=f"✅ Correct answer(s): {', '.join(correct_options)}")
+            input_link = gr.Textbox(label="Input Spreadsheet URL", placeholder="https://docs.google.com/...")
+            output_link = gr.Textbox(label="Output Spreadsheet URL", placeholder="https://docs.google.com/...")
+            specific_chapter = gr.Textbox(label="Process Only This Chapter (Optional)")
+            chapter_list = gr.Textbox(label="Or List of Chapters (comma separated)", placeholder="chapter1, chapter2")
 
-def next_question():
-    quiz_data["index"] += 1
-    if quiz_data["index"] >= len(quiz_data["questions"]):
-        return (
-            gr.update(visible=True),  # input_form
-            gr.update(visible=False),  # flashcard
-            gr.update(value="🎉 Quiz complete! You can go back and try a new story."),
-            gr.update(visible=False),
-            gr.update(visible=False),
-            gr.update(visible=False),
-            gr.update(value=""),
-            gr.update(visible=False),
-            gr.update(visible=False)
-        )
-    return render_question(quiz_data["index"])
+            run_button = gr.Button("Generate Quiz")
+            output_text = gr.Textbox(label="Status", lines=1, interactive=False)
+            output_logs = gr.Textbox(label="Logs", lines=10, interactive=False)
 
-def go_back():
-    quiz_data["questions"] = []
-    quiz_data["index"] = 0
-    quiz_data["answers"] = []
-    quiz_data["last_selected"] = None
+            run_button.click(
+                fn=generate_quiz,
+                inputs=[input_link, output_link, specific_chapter, chapter_list],
+                outputs=[output_text, output_logs]
+            )
 
-    return (
-        gr.update(visible=True),   # input form
-        gr.update(visible=False),  # flashcard
-        gr.update(value=""),
-        gr.update(choices=[], value=None, visible=False),
-        gr.update(choices=[], value=None, visible=False),
-        gr.update(visible=False),
-        gr.update(value=""),
-        gr.update(visible=False),
-        gr.update(visible=True)
-    )
+        with gr.Tab("Storyboard Image"):
+            gr.Markdown("📸 *Storyboard module coming soon...*")
 
-with gr.Blocks() as demo:
-    with gr.Column(visible=True) as input_form:
-        topic_input = gr.Textbox(label="Enter quiz topic", placeholder="e.g. The King’s Monkey Servant")
-        story_input = gr.Textbox(label="Enter a story", lines=10)
-        submit_btn = gr.Button("Generate Quiz")
-
-    with gr.Column(visible=False) as flashcard:
-        question_text = gr.Markdown()
-        scq_options = gr.Radio(choices=[], label="Select one option", interactive=True, visible=False)
-        mcq_options = gr.CheckboxGroup(choices=[], label="Select multiple options", visible=False)
-        mcq_submit_btn = gr.Button("Submit MCQ", visible=False)
-        feedback_text = gr.Markdown()
-        flip_btn = gr.Button("Flip to show answer", visible=False)
-        next_btn = gr.Button("Next Question", visible=True)
-        back_btn = gr.Button("Go back to story input", visible=True)
-
-    submit_btn.click(
-        generate_quiz,
-        inputs=[topic_input, story_input],
-        outputs=[
-            input_form, flashcard, question_text,
-            scq_options, mcq_options, mcq_submit_btn,
-            feedback_text, flip_btn, next_btn
-        ]
-    )
-
-    scq_options.change(
-        submit_scq,
-        inputs=scq_options,
-        outputs=[scq_options, feedback_text, flip_btn]
-    )
-
-    mcq_submit_btn.click(
-        submit_mcq,
-        inputs=mcq_options,
-        outputs=[mcq_options, feedback_text, flip_btn, next_btn]
-    )
-
-    flip_btn.click(flip_to_show_answer, outputs=feedback_text)
-
-    next_btn.click(
-        next_question,
-        outputs=[
-            input_form, flashcard, question_text,
-            scq_options, mcq_options, mcq_submit_btn,
-            feedback_text, flip_btn, next_btn
-        ]
-    )
-
-    back_btn.click(
-        go_back,
-        outputs=[
-            input_form, flashcard, question_text,
-            scq_options, mcq_options, mcq_submit_btn,
-            feedback_text, flip_btn, next_btn
-        ]
-    )
+        with gr.Tab("Animation"):
+            gr.Markdown("🎬 *Animation module coming soon...*")
 
 if __name__ == "__main__":
     demo.launch()
