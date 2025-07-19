@@ -9,9 +9,7 @@ from quiz.backend.gurukula_quizgen import process_chapter_to_sheet
 import gspread
 from google.oauth2.service_account import Credentials
 import datetime
-from dotenv import load_dotenv; load_dotenv()
-from quiz.backend.config import env_config
-
+from dotenv import load_dotenv;
 load_dotenv()  
 
 # 1. Store your service account JSON securely as a multiline string or from HF secret
@@ -27,7 +25,12 @@ if GOOGLE_SERVICE_ACCOUNT_JSON:
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_cred.name
     os.environ["GOOGLE_SCOPES"] = "https://www.googleapis.com/auth/spreadsheets"
 
-# Config
+# 4. Now import config (AFTER env vars are set)
+from quiz.backend.config import load_env_vars, load_app_config
+env_config = load_env_vars()
+app_config = load_app_config()
+
+# 5. Extract config values
 SERVICE_ACCOUNT_FILE = env_config["SERVICE_ACCOUNT_FILE"]
 GOOGLE_SCOPES = env_config["GOOGLE_SCOPES"]
 
