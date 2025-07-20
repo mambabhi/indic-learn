@@ -1,3 +1,4 @@
+import json
 import sys
 import os
 import tempfile
@@ -16,16 +17,16 @@ load_dotenv()
 GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")  # e.g. from Hugging Face secret
 
 # 2. Write to a temporary file
-if GOOGLE_SERVICE_ACCOUNT_JSON:
-    temp_cred = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
-    temp_cred.write(GOOGLE_SERVICE_ACCOUNT_JSON.encode("utf-8"))
-    temp_cred.close()
+# if GOOGLE_SERVICE_ACCOUNT_JSON:
+#     temp_cred = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
+#     temp_cred.write(GOOGLE_SERVICE_ACCOUNT_JSON.encode("utf-8"))
+#     temp_cred.close()
 
-    # 3. Set the env var before config loads
-    print("Temp Cred:", temp_cred.name)
+#     # 3. Set the env var before config loads
+#     print("Temp Cred:", temp_cred.name)
 
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_cred.name
-    os.environ["GOOGLE_SCOPES"] = "https://www.googleapis.com/auth/spreadsheets"
+#     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_cred.name
+#     os.environ["GOOGLE_SCOPES"] = "https://www.googleapis.com/auth/spreadsheets"
 
 # 4. Now import config (AFTER env vars are set)
 from quiz.backend.config import load_env_vars, load_app_config
@@ -33,11 +34,17 @@ env_config = load_env_vars()
 app_config = load_app_config()
 
 # 5. Extract config values
-SERVICE_ACCOUNT_FILE = env_config["SERVICE_ACCOUNT_FILE"]
-GOOGLE_SCOPES = env_config["GOOGLE_SCOPES"]
+# SERVICE_ACCOUNT_FILE = env_config["SERVICE_ACCOUNT_FILE"]
+# GOOGLE_SCOPES = env_config["GOOGLE_SCOPES"]
 
-print("GOOGLE_APPLICATION_CREDENTIALS =", os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
-print("SERVICE_ACCOUNT_FILE =", SERVICE_ACCOUNT_FILE)
+if not GOOGLE_SERVICE_ACCOUNT_JSON:
+    raise ValueError("GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable is not set.")
+
+service_account_info = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
+GOOGLE_SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+creds = Credentials.from_service_account_info(service_account_info, scopes=GOOGLE_SCOPES)
+
+print("Service Account Credentials Loaded Successfully")
 
 # Track processed chapters per session
 processed_today = []
@@ -62,7 +69,7 @@ def is_valid_chapter_list(chapter_list: str) -> bool:
 
 def get_all_chapters(spreadsheet_url):
     try:
-        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=GOOGLE_SCOPES)
+        creds = Credentials.from_service_account_info(service_account_info, scopes=GOOGLE_SCOPES)
         client = gspread.authorize(creds)
         sheet = client.open_by_url(spreadsheet_url)
         return [ws.title for ws in sheet.worksheets()]
