@@ -9,7 +9,7 @@ load_dotenv()
 def load_env_vars():
     return {
         "SERVICE_ACCOUNT_FILE": os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
-        "GOOGLE_SCOPES": os.getenv("GOOGLE_SCOPES", "").split(","),
+        "GOOGLE_SCOPES": os.getenv("GOOGLE_SCOPES", "").split(",")
     }
 
 def load_app_config(path="quiz/backend/config/app_config.yaml"):

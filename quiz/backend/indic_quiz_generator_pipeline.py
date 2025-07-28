@@ -263,7 +263,7 @@ def run_scq_only(chapter_text: str, num_scq: int):
     return parser.run(r_scq.content)
 
 
-def run_mcq_with_retries(chapter_text: str, num_mcq: int, max_retries: int = 3):
+def run_mcq_with_retries(chapter_text: str, num_mcq: int, max_retries: int = 1):
     mcq_agent = build_english_quiz_agent("llama-3.3-70b-versatile")
     mcq_prompt = build_prompt(chapter_text, num_mcq, "MCQ")  # Over-generate
     log_and_print(f"🔍 Running MCQ generation with prompt:\n{mcq_prompt}\n")

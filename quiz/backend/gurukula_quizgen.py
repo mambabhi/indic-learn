@@ -15,7 +15,7 @@ from quiz.backend.config import env_config, app_config
 from quiz.backend.indic_quiz_generator_pipeline import (
     run_parallel_quiz_with_mcq_retry,
 )
-from quiz.backend.utils.gsheets import clear_all_sheet_formatting_only
+from quiz.backend.utils.gsheets import get_google_credentials, clear_all_sheet_formatting_only
 from quiz.backend.utils.logging_utils import log_and_print
 
 
@@ -24,6 +24,12 @@ SERVICE_ACCOUNT_FILE = env_config["SERVICE_ACCOUNT_FILE"]
 GOOGLE_SCOPES = env_config["GOOGLE_SCOPES"]
 INPUT_SPREADSHEET_NAME = app_config["spreadsheets"]["input_name"]
 OUTPUT_SPREADSHEET_NAME = app_config["spreadsheets"]["output_name"]
+
+# Get the directory of the current file (gurukula_quizgen.py)
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Navigate up one directory (from 'backend' to 'quiz') and then into 'data'
+DATA_DIR = os.path.join(CURRENT_DIR, '..', 'data')
 
 # ======== STEP 1: Run Agent and Get JSON ========
 def generate_quiz_json(chapter_text: str, num_questions: int = 15) -> dict:
@@ -87,10 +93,22 @@ def quiz_json_to_dataframe(chapter_title: str, quiz_json: dict, num_questions: i
 
 # ======== STEP 3: Upload to Google Sheet ========
 def upload_to_sheet(df: pd.DataFrame, chapter_title: str):
-    creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=GOOGLE_SCOPES)
-    client = gspread.authorize(creds)
+    print("Uploading to Google Sheet...")
+
+    creds = get_google_credentials()
+    if not creds or not creds.valid:
+        raise ValueError("Invalid Google service account credentials.")
+    
+    try:
+       client = gspread.authorize(creds)
+    except Exception as e:
+        raise ValueError(f"Failed to authorize with Google Sheets API: {str(e)}")
+
+    print("Google sheets authorized...")
 
     spreadsheet = client.open(OUTPUT_SPREADSHEET_NAME)
+
+    print("Spreadsheet opened for update...")
 
     # Check if sheet with chapter_title exists, else create it
     try:
@@ -192,7 +210,9 @@ def apply_conditional_formatting(spreadsheet_id: str, chapter_title: str, df: pd
 
 # ======== SRead Chapter Text from Spreadsheet ========
 def read_chapter_text_from_sheet(chapter_title: str) -> Tuple[str, int]:
-    creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=GOOGLE_SCOPES)
+    print(f"Reading chapter text from spreadsheet: {chapter_title}")
+    creds = get_google_credentials()
+
     client = gspread.authorize(creds)
     spreadsheet = client.open(INPUT_SPREADSHEET_NAME)
 
@@ -268,8 +288,6 @@ def process_chapter_to_sheet(
 
 # ======== Processing Single Chapter ========
 def run_single_quiz_pipeline(chapter_title: str, input_source: str):
-    data_folder = "data"
-
     if input_source == "file":
         # get the chapter counts from the app_config YAML
         num_questions = app_config.get("chapter_question_counts", {}).get(chapter_title, 15)  # fallback to 15
@@ -277,7 +295,7 @@ def run_single_quiz_pipeline(chapter_title: str, input_source: str):
         if not num_questions:
             raise ValueError(f"Chapter '{chapter_title}' not found in app config.")
 
-        chapter_path = f"{data_folder}/{chapter_title}.txt"
+        chapter_path = f"{DATA_DIR}/{chapter_title}.txt"
         if not os.path.exists(chapter_path):
             raise FileNotFoundError(f"No such chapter text file: {chapter_path}")
         process_chapter_to_sheet(chapter_path, chapter_title, num_questions, input_source)
@@ -287,23 +305,29 @@ def run_single_quiz_pipeline(chapter_title: str, input_source: str):
 # ======== Processing Chapters in Batch ========
 def run_batch_quiz_pipeline(input_source: str):        
     if input_source == "file":
-        data_folder = "data"
         quiz_counts = app_config.get("chapter_question_counts", {})
-        for filename in os.listdir(data_folder):
+        for filename in os.listdir(DATA_DIR):
             if filename.endswith(".txt"):
-                chapter_path = os.path.join(data_folder, filename)
+                chapter_path = os.path.join(DATA_DIR, filename)
                 chapter_title = filename.replace(".txt", "").strip()
                 num_questions = quiz_counts.get(chapter_title.lower(), 15)
                 process_chapter_to_sheet(chapter_path, chapter_title, num_questions, input_source)
     elif input_source == "spreadsheet":  # spreadsheet
         # ===== Get all sheet/tab names from input spreadsheet =====
-        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=GOOGLE_SCOPES)
+        print(f"📘 Reading chapters from spreadsheet: {INPUT_SPREADSHEET_NAME}")
+        creds = get_google_credentials()
+
+        print("Authorizing Google Sheets API...")  
+        if not creds or not creds.valid:
+            raise ValueError("Invalid Google service account credentials.")
+        
         client = gspread.authorize(creds)
         spreadsheet = client.open(INPUT_SPREADSHEET_NAME)
 
+        print("Spreadsheet opened successfully...")
         sheet_list = spreadsheet.worksheets()
         chapter_titles = [sheet.title for sheet in sheet_list]
-
+        
         for chapter_title in chapter_titles:
             process_chapter_to_sheet(None, chapter_title, None, input_source)
     else:
