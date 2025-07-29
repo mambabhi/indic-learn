@@ -9,7 +9,7 @@ pinned: false
 ---
 
 <p align="left">
-  <img src="assets/gurukula-logo.png" alt="Gurukula Logo" width="50"/>
+  <img width="52" height="51" alt="Image" src="https://github.com/user-attachments/assets/e4bde3a6-765d-48a9-a025-7425c959de43" alt="Gurukula Logo" />
 </p>
 
 **`indic-learn`** is a modular AI-powered toolkit designed to support culturally grounded educational content for the Gurukula learning platform. Its first major module, `quiz`, is a fully automated pipeline for generating high-quality single and multiple-choice quizzes (SCQ and MCQ) from Indian story texts. Built for scale and precision, it leverages concurrent LLM agents (via Groq and Agno) to produce rich, classroom-ready assessments with minimal manual intervention.
@@ -110,19 +110,20 @@ Each chapter should be a separate tab. The layout within a tab should look like:
 
 ### ✅ Story Spreadsheet Tab (gurukula-story-master)
 
-<img src="assets/gurukula-story-master.png" alt="Story Master Screenshot" width="500"/>
+<img width="526" height="352" alt="Image" src="https://github.com/user-attachments/assets/85daa294-ce14-4c38-8445-5c0f412ad668" alt="Story Master Screenshot"/>
 <br/>
 <i>Figure 1: Input spreadsheet with story content and number of questions.</i>
 
 ### ✅ Generated Quiz Tab (gurukula-quiz-master)
 
-<img src="assets/gurukula-quiz-master.png" alt="Quiz Master Output" width="500"/>
+<img width="1347" height="554" alt="Image" src="https://github.com/user-attachments/assets/b689a935-13d5-4eb3-b2c1-d8641973f91d" alt="Quiz Master Output"/>
 <br/>
 <i>Figure 2: Generated quiz questions with highlights in output sheet.</i>
 
 ### ✅ Final Quiz in Gurukula App
 
-<img src="assets/gurukula-app-quiz.jpeg" alt="Gurukula Quiz App UI" width="500"/>
+![Image](https://github.com/user-attachments/assets/373d4ec6-e549-472b-978a-4450e6cd9a50)
+
 <br/>
 <i>Figure 3: Gurukula app displaying quiz in interactive mode.</i>
 
