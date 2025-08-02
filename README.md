@@ -241,8 +241,6 @@ This project supports **Indic education** by making quiz creation for Indian sto
 
 Questions? Want to contribute? Reach out to `@mambabhi` on GitHub.
 
-```
-
 ---
 
 ## ✅ Coming Soon
