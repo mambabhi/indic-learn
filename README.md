@@ -55,9 +55,16 @@ GOOGLE_SCOPES=https://www.googleapis.com/auth/spreadsheets
 
 ---
 
-🚀 **How to Run**
+🚀 **How to Generate Quizzes**
 
-All invocations use the main script: `backend/gurukula_quizgen.py`
+### Using the Hugging Face Spaces Web UI: `https://huggingface.co/spaces/mambabhi/indic-learn`
+
+- Launch the app using the provided `app.py` file (locally or on Hugging Face Spaces).
+- Upload or specify your input spreadsheet (with chapters).
+- Specify the output spreadsheet where generated quizzes will be written automatically.
+- Monitor progress and logs directly in the UI.
+
+### Using the main script on command line: `backend/gurukula_quizgen.py`
 
 1. **Run a single chapter from file:**
 
@@ -120,6 +127,12 @@ Each chapter should be a separate tab. The layout within a tab should look like:
 <br/>
 <i>Figure 2: Generated quiz questions with highlights in output sheet.</i>
 
+### ✅ Hugging Face Spaces UI for Quiz Generation
+
+<img width="489" height="802" alt="Image" src="https://github.com/user-attachments/assets/f60cfdf8-bc5c-4811-a933-1f30059f45b3" />
+<br/>
+<i>Figure 3: Hugging Face Spaces UI—upload your input spreadsheet and specify the output spreadsheet. The UI triggers quiz generation and updates the output sheet automatically.</i>
+
 ### ✅ Final Quiz in Gurukula App
 
 ![Image](https://github.com/user-attachments/assets/373d4ec6-e549-472b-978a-4450e6cd9a50)
@@ -165,6 +178,58 @@ Each chapter should be a separate tab. The layout within a tab should look like:
 * 📊 Google Sheets API (via `gspread`, `googleapiclient`)
 * 🐍 Python 3.11
 * ✅ Configurable with `YAML`-based settings
+
+---
+
+## 🧩 Key Functionality
+
+### 1. Quiz Generation Pipeline
+- **Parallel Generation:** Two LLaMA 3 models (via Groq API and Agno agent) run in parallel threads—one for SCQs (single correct answer), one for MCQs (multiple correct answers).
+- **Prompt Engineering:** Carefully crafted prompts instruct LLMs to generate questions in strict JSON format, with clear rules for options, correct answers, and structure.
+- **Validation & Filtering:** MCQs are validated to ensure multiple correct options. Questions are deduplicated using text similarity checks.
+- **Fallback Logic:** If not enough valid MCQs are generated, extra SCQs are added to maintain the desired quiz size.
+
+### 2. Google Sheets Integration
+- **Input:** Reads story chapters from a Google Sheet (each chapter is a tab with `NumQuestions` and `Content` fields).
+- **Output:** Writes generated quizzes to a separate output Google Sheet, with each chapter as a tab. Correct answers are highlighted using conditional formatting.
+- **Configurable:** Sheet names, question counts, and other settings are loaded from YAML and `.env` files.
+
+### 3. Quiz Structure
+- **SCQ:** Single correct answer, labeled as a single letter (e.g., `"a"`).
+- **MCQ:** Multiple correct answers, labeled as a string of letters (e.g., `"ac"`), with validation to ensure at least two correct options.
+- **Question Format:** Each question includes the text, options (labeled "a."–"d."), correct answer(s), points, and timer.
+
+### 4. User Interfaces
+- **CLI:** Main script can be run for a single chapter or batch mode, from file or spreadsheet.
+- **Gradio UI:** Web interface for admins to trigger quiz generation, select chapters, and view logs.
+
+### 5. Extensibility
+- **Pluggable Pipeline:** Modular quiz generation logic allows for future expansion (e.g., storyboard, animation modules).
+- **Logging:** All steps are logged for debugging and traceability.
+
+---
+
+## 📝 Key Definitions
+
+- **SCQ (Single Choice Question):** Only one correct answer.
+- **MCQ (Multiple Choice Question):** Two or more correct answers, must be a string of unique letters (e.g., `"bd"`).
+- **QuizParser:** Parses and normalizes the LLM output into the expected JSON structure.
+- **Conditional Formatting:** Correct options are highlighted in green in the output Google Sheet.
+
+---
+
+## 📁 Project Structure
+
+```
+indic-learn/
+├── backend/
+│   ├── gurukula_quizgen.py      # Main script
+│   ├── indic_quiz_generator_pipeline.py  # Quiz generation logic, prompt building, validation, parsing
+│   └── utils/                   # Google Sheets utilities, logging, etc.
+├── data/                        # Text chapters for file-based mode
+├── config/                      # App config & env variables
+└── README.md                    # You're here
+```
 
 ---
 
