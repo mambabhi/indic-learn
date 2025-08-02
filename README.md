@@ -57,37 +57,39 @@ GOOGLE_SCOPES=https://www.googleapis.com/auth/spreadsheets
 
 🚀 **How to Generate Quizzes**
 
-### Using the Hugging Face Spaces Web UI: `https://huggingface.co/spaces/mambabhi/indic-learn`
+**Using the Hugging Face Spaces Web UI**
 
-- Launch the app using the provided `app.py` file (locally or on Hugging Face Spaces).
+- Launch the URL: https://huggingface.co/spaces/mambabhi/indic-learn (for local testing use the `app.py` file).
 - Upload or specify your input spreadsheet (with chapters).
 - Specify the output spreadsheet where generated quizzes will be written automatically.
 - Monitor progress and logs directly in the UI.
 
-### Using the main script on command line: `backend/gurukula_quizgen.py`
+**Using the main script on command line**
+
+For all invocations use: `backend/gurukula_quizgen.py`
 
 1. **Run a single chapter from file:**
 
 ```bash
-python backend/gurukula_quizgen.py --input_source file --chapter chapter23
+python -m quiz.backend.gurukula_quizgen.py --input_source file --chapter chapter23
 ```
 
 2. **Run all chapters in batch from file:**
 
 ```bash
-python backend/gurukula_quizgen.py --input_source file
+python -m quiz.backend.gurukula_quizgen.py --input_source file
 ```
 
 3. **Run a single chapter from Google Sheets:**
 
 ```bash
-python backend/gurukula_quizgen.py --input_source spreadsheet --chapter chapter23
+python -m quiz.backend.gurukula_quizgen.py --input_source spreadsheet --chapter chapter23
 ```
 
 4. **Run from Google Sheets (single or multiple tabs):**
 
 ```bash
-python backend/gurukula_quizgen.py --input_source spreadsheet
+python -m quiz.backend.gurukula_quizgen.py --input_source spreadsheet
 ```
 
 ---
@@ -239,19 +241,6 @@ This project supports **Indic education** by making quiz creation for Indian sto
 
 Questions? Want to contribute? Reach out to `@mambabhi` on GitHub.
 
----
-
-## 📂 Project Structure (simplified)
-
-```
-indic-learn/
-├── backend/
-│   ├── gurukula_quizgen.py      # Main script
-│   ├── indic_quiz_generator_pipeline.py  # Quiz generation logic
-│   └── utils/                   # Sheets formatting, logging
-├── data/                        # Text chapters for file mode
-├── config/                      # App config & env variables
-└── README.md                    # You're here
 ```
 
 ---
