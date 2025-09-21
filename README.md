@@ -35,22 +35,26 @@ Future modules coming soon include:
 
 🛠 **Setup**
 
-You’ll need a `.env` and `config.yaml` file with the following (simplified for this README):
+You’ll need a `.env` and `app_config.yaml` file with the following (simplified for this README). 
 
 ```yaml
-# config.yaml
-spreadsheet:
-  name: gurukula-quiz-master
-input_spreadsheet:
-  name: gurukula-story-master
+# app_config.yaml
+spreadsheets:
+  input_name: gurukula-story-master
+  output_name: gurukula-quiz-master
+
+documents:
+  link: <some_gdoc_link>
+
 chapter_question_counts:
-  chapter23: 20
-  chapter24: 15
+  chapter23: 2
 ```
 
 ```env
+# .env -- you will need the env variables setup secrets in Huggingface space
 SERVICE_ACCOUNT_FILE=path/to/google-service-key.json
-GOOGLE_SCOPES=https://www.googleapis.com/auth/spreadsheets
+GOOGLE_SCOPES=https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/documents
+GOOGLE_SERVICE_ACCOUNT_KEY_BASE64=placeholder_for_base64_encoded_key
 ```
 
 ---
@@ -92,6 +96,22 @@ python -m quiz.backend.gurukula_quizgen --input_source spreadsheet --chapter cha
 python -m quiz.backend.gurukula_quizgen --input_source spreadsheet
 ```
 
+5. **Run from Google Docs (single or multiple) without chapter:**
+
+```bash
+python -m quiz.backend.gurukula_quizgen --input_source gdoc
+```
+
+6. **Run from Google Docs (single or multiple) with chapter:**
+
+```bash
+python -m quiz.backend.gurukula_quizgen --input_source gdoc --chapter chapter23
+```
+---
+🧾 **Input Doc Format (`gurukula-story-master`)**
+
+This can be any Google doc with a proper Chapter title which will be used to create a tab in the output quiz-master spreadsheet below.
+
 ---
 
 🧾 **Input Sheet Format (`gurukula-story-master`)**
@@ -112,28 +132,42 @@ Each chapter should be a separate tab. The layout within a tab should look like:
 * Each chapter gets a tab with the generated questions.
 * SCQs and MCQs are mixed and randomized.
 * Correct options are highlighted in green.
+* Currently, for GDOC this is hardcoded as the fixed output spreadsheet
 
 ---
 
 ## 🧪 Screenshots
 
+### ✅ Story GDoc
+
+<img width="526" height="352" alt="Image" src="https://github.com/user-attachments/assets/46fb20cc-9ea6-4488-95c0-b54717120604" alt="Story GDoc Screenshot"/>
+
+<br/>
+<i>Figure 1: Input GDoc with story content</i>
+
 ### ✅ Story Spreadsheet Tab (gurukula-story-master)
 
 <img width="526" height="352" alt="Image" src="https://github.com/user-attachments/assets/85daa294-ce14-4c38-8445-5c0f412ad668" alt="Story Master Screenshot"/>
 <br/>
-<i>Figure 1: Input spreadsheet with story content and number of questions.</i>
+<i>Figure 2: Input spreadsheet with story content and number of questions.</i>
 
 ### ✅ Generated Quiz Tab (gurukula-quiz-master)
 
 <img width="1347" height="554" alt="Image" src="https://github.com/user-attachments/assets/b689a935-13d5-4eb3-b2c1-d8641973f91d" alt="Quiz Master Output"/>
 <br/>
-<i>Figure 2: Generated quiz questions with highlights in output sheet.</i>
+<i>Figure 3: Generated quiz questions with highlights in output sheet.</i>
 
-### ✅ Hugging Face Spaces UI for Quiz Generation
+### ✅ Hugging Face Spaces UI for Quiz Generation (GDoc)
+
+<img width="489" height="802" alt="Image" src="https://github.com/user-attachments/assets/cfe695b1-78a9-4093-8406-877f182949ea" />
+<br/>
+<i>Figure 4: Hugging Face Spaces UI—upload your GDOC. The UI triggers quiz generation and updates the gurukula-quiz-master output sheet automatically.</i>
+
+### ✅ Hugging Face Spaces UI for Quiz Generation (Spreadsheet)
 
 <img width="489" height="802" alt="Image" src="https://github.com/user-attachments/assets/f60cfdf8-bc5c-4811-a933-1f30059f45b3" />
 <br/>
-<i>Figure 3: Hugging Face Spaces UI—upload your input spreadsheet and specify the output spreadsheet. The UI triggers quiz generation and updates the output sheet automatically.</i>
+<i>Figure 5: Hugging Face Spaces UI—upload your input spreadsheet and specify the output spreadsheet. The UI triggers quiz generation and updates the output sheet automatically.</i>
 
 ### ✅ Final Quiz in Gurukula App
 
@@ -166,18 +200,18 @@ Each chapter should be a separate tab. The layout within a tab should look like:
 * Highlights correct options in green using Google Sheets formatting
 * Allows flexible quiz size per chapter (configurable)
 
-### 📤 Google Sheets Integration
+### 📤 Google Doc & Sheets Integration
 
-* Reads chapters directly from Google Sheets tabs
+* Reads chapters directly from Google Docs or Google sheets tabs
 * Writes quizzes to a separate output Google Sheet
-* Enables easy use by **Gurukula admins** via spreadsheets
+* Enables easy use by **Gurukula admins** via docs & spreadsheets
 
 ---
 
 ## 🛠 Tech Stack
 
 * 🧠 ChatGPT OSS via **Groq API** (served with Markdown using **Agno agent**)
-* 📊 Google Sheets API (via `gspread`, `googleapiclient`)
+* 📊 Google Docs & Sheets API (via `gspread`, `googleapiclient`)
 * 🐍 Python 3.11
 * ✅ Configurable with `YAML`-based settings
 
@@ -188,13 +222,13 @@ Each chapter should be a separate tab. The layout within a tab should look like:
 ### 1. Quiz Generation Pipeline
 - **Parallel Generation:** ChatGPT OSS model (via Groq API and Agno agent) run in parallel threads—one for SCQs (single correct answer), one for MCQs (multiple correct answers).
 - **Prompt Engineering:** Carefully crafted prompts instruct LLMs to generate questions in strict JSON format, with clear rules for options, correct answers, and structure.
-- **Validation & Filtering:** MCQs are validated to ensure multiple correct options. Questions are deduplicated using text similarity checks.
+- **Validation & Filtering:** MCQs are validated to ensure multiple correct options. Questions are de-duplicated using text similarity checks.
 - **Fallback Logic:** If not enough valid MCQs are generated, extra SCQs are added to maintain the desired quiz size.
 
-### 2. Google Sheets Integration
-- **Input:** Reads story chapters from a Google Sheet (each chapter is a tab with `NumQuestions` and `Content` fields).
+### 2. Google Docs & Sheets Integration
+- **Input:** Reads story chapters from a Google Sheet (each chapter is a tab with `NumQuestions` and `Content` fields) OR from a Google Doc (each doc is a Chapter).
 - **Output:** Writes generated quizzes to a separate output Google Sheet, with each chapter as a tab. Correct answers are highlighted using conditional formatting.
-- **Configurable:** Sheet names, question counts, and other settings are loaded from YAML and `.env` files.
+- **Configurable:** Sheet names, question counts, and other settings are loaded from the sheets or YAML and `.env` files for GDoc and File formats, when ran from the CLI.
 
 ### 3. Quiz Structure
 - **SCQ:** Single correct answer, labeled as a single letter (e.g., `"a"`).
@@ -202,7 +236,7 @@ Each chapter should be a separate tab. The layout within a tab should look like:
 - **Question Format:** Each question includes the text, options (labeled "a."–"d."), correct answer(s), points, and timer.
 
 ### 4. User Interfaces
-- **CLI:** Main script can be run for a single chapter or batch mode, from file or spreadsheet.
+- **CLI:** Main script can be run for a single chapter or batch mode, from file or spreadsheet or gdoc.
 - **Gradio UI:** Web interface for admins to trigger quiz generation, select chapters, and view logs.
 
 ### 5. Extensibility
@@ -225,12 +259,22 @@ Each chapter should be a separate tab. The layout within a tab should look like:
 ```
 indic-learn/
 ├── backend/
-│   ├── gurukula_quizgen.py      # Main script
-│   ├── indic_quiz_generator_pipeline.py  # Quiz generation logic, prompt building, validation, parsing
-│   └── utils/                   # Google Sheets utilities, logging, etc.
-├── data/                        # Text chapters for file-based mode
-├── config/                      # App config & env variables
-└── README.md                    # You're here
+│   ├── gurukula_quizgen.py              # Main CLI script for quiz generation
+│   ├── indic_quiz_generator_pipeline.py # Quiz generation logic, prompt building, validation, parsing
+│   ├── test_pipeline.py                 # Backend test script for pipeline
+│   ├── tests/                           # (Optional) Test scripts
+│   └── utils/
+│       ├── gsheets.py                   # Google Sheets & Docs utilities
+│       └── logging_utils.py             # Logging utilities
+├── config/
+│   ├── app_config.yaml                  # App configuration (sheet names, doc links, etc.)
+│   └── ...                              # Other config files
+├── data/                                # Text chapters for file-based mode
+├── app.py                               # Gradio app for Hugging Face Spaces
+├── test_app.py                          # Local/test Gradio app
+├── requirements.txt                     # Main requirements for Hugging Face Spaces
+├── requirements-local.txt               # (Optional) Local-only requirements
+└── README.md                            # You're here
 ```
 
 ---
