@@ -85,5 +85,5 @@ tzdata==2025.2
 uritemplate==4.2.0
 urllib3==2.5.0
 uvicorn==0.35.0
-websockets==10.4
+websockets==9.1
 zipp==3.23.0
