@@ -9,9 +9,6 @@ import gspread
 from quiz.backend.utils.gsheets import get_google_credentials
 import datetime
 
-# Track processed chapters per session
-processed_today = []
-
 def is_valid_gsheet_url(url: str) -> bool:
     return (
         isinstance(url, str)
@@ -57,7 +54,6 @@ def generate_quiz(
     chapter_list,
     progress=gr.Progress()
 ):
-    global processed_today
     logs = []
 
     if input_mode == "Google Docs":
@@ -81,11 +77,7 @@ def generate_quiz(
                 return "❌ Number of questions provided without a Google Doc link.", logs
         if not valid_pairs:
             return "❌ Please provide at least one Google Doc link.", logs
-        today = datetime.date.today()
-        if len(processed_today) >= 6:
-            return "⚠️ Daily limit of 6 docs reached.", logs
-        count_to_process = min(6 - len(processed_today), len(valid_pairs))
-        valid_pairs = valid_pairs[:count_to_process]
+        count_to_process = len(valid_pairs)
         progress(0)
         for i, (link, n) in enumerate(valid_pairs):
             try:
@@ -93,7 +85,6 @@ def generate_quiz(
                 from quiz.backend.gurukula_quizgen import process_chapter_to_sheet_gdoc
                 spreadsheet_id = process_chapter_to_sheet_gdoc(link, n)
                 logs.append(f"✅ Completed: {link} → Sheet ID: {spreadsheet_id}")
-                processed_today.append((link, today))
             except Exception as e:
                 logs.append(f"❌ Error processing {link}: {str(e)}")
             progress((i + 1) / count_to_process)
@@ -121,20 +112,13 @@ def generate_quiz(
             return result, logs
         chapters = result
 
-    today = datetime.date.today()
-    if len(processed_today) >= 6:
-        return "⚠️ Daily limit of 6 chapters reached.", logs
-
-    count_to_process = min(6 - len(processed_today), len(chapters))
-    chapters = chapters[:count_to_process]
-
+    count_to_process = len(chapters)
     progress(0)
     for i, chapter in enumerate(chapters):
         try:
             logs.append(f"📘 Processing {chapter}...")
             spreadsheet_id = process_chapter_to_sheet(None, chapter, None, "spreadsheet")
             logs.append(f"✅ Completed: {chapter} → Sheet ID: {spreadsheet_id}")
-            processed_today.append((chapter, today))
         except Exception as e:
             logs.append(f"❌ Error processing {chapter}: {str(e)}")
         progress((i + 1) / count_to_process)
@@ -194,12 +178,14 @@ with gr.Blocks(title="Gurukula Admin Portal") as demo:
             def toggle_ui(mode):
                 return (
                     gr.update(visible=(mode == "Google Docs")),
-                    gr.update(visible=(mode == "Spreadsheets"))
+                    gr.update(visible=(mode == "Spreadsheets")),
+                    "",
+                    ""
                 )
             input_mode.change(
                 toggle_ui,
                 inputs=[input_mode],
-                outputs=[gdoc_ui, spreadsheet_ui]
+                outputs=[gdoc_ui, spreadsheet_ui, output_text, output_logs]
             )
 
             run_button.click(
