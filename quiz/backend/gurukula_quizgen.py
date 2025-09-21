@@ -15,7 +15,7 @@ from quiz.backend.config import env_config, app_config
 from quiz.backend.indic_quiz_generator_pipeline import (
     run_parallel_quiz_with_mcq_retry,
 )
-from quiz.backend.utils.gsheets import get_google_credentials, clear_all_sheet_formatting_only
+from quiz.backend.utils.gsheets import get_gdoc_title, get_google_credentials, clear_all_sheet_formatting_only, read_chapter_text_from_gdoc
 from quiz.backend.utils.logging_utils import log_and_print
 
 
@@ -271,8 +271,12 @@ def process_chapter_to_sheet(
         assert chapter_path is not None, "chapter_path must not be None when input_source is 'file'"
         with open(chapter_path, "r", encoding="utf-8") as f:
             chapter_text = f.read()
+    elif input_source == "gdoc":
+        doc_link = app_config['documents']['link']
+        print(f"📘 Reading from Google Doc: {doc_link}")
+        chapter_text = read_chapter_text_from_gdoc(doc_link)
     else:
-        raise ValueError("Invalid input source. Use 'spreadsheet' or 'file'.")
+        raise ValueError("Invalid input source. Use 'spreadsheet', 'file' or 'gdoc'.")
 
     print(f"📘 Processing: {chapter_title} with {num_questions} questions...")
     quiz_json = quiz_generator_fn(chapter_text, num_questions)
@@ -289,16 +293,26 @@ def process_chapter_to_sheet(
 # ======== Processing Single Chapter ========
 def run_single_quiz_pipeline(chapter_title: str, input_source: str):
     if input_source == "file":
-        # get the chapter counts from the app_config YAML
-        num_questions = app_config.get("chapter_question_counts", {}).get(chapter_title, 15)  # fallback to 15
+        data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
+        if chapter_title:
+            # get the chapter counts from the app_config YAML
+            num_questions = app_config.get("chapter_question_counts", {}).get(chapter_title, 15)  # fallback to 15
 
-        if not num_questions:
-            raise ValueError(f"Chapter '{chapter_title}' not found in app config.")
+            if not num_questions:
+                raise ValueError(f"Chapter '{chapter_title}' not found in app config.")
 
-        chapter_path = f"{DATA_DIR}/{chapter_title}.txt"
-        if not os.path.exists(chapter_path):
-            raise FileNotFoundError(f"No such chapter text file: {chapter_path}")
-        process_chapter_to_sheet(chapter_path, chapter_title, num_questions, input_source)
+            chapter_path = f"{DATA_DIR}/{chapter_title}.txt"
+            if not os.path.exists(chapter_path):
+                raise FileNotFoundError(f"No such chapter text file: {chapter_path}")
+            process_chapter_to_sheet(chapter_path, chapter_title, num_questions, input_source)
+        else:
+            # Process all .txt files in /data
+            for fname in os.listdir(data_dir):
+                if fname.endswith('.txt'):
+                    chapter_name = os.path.splitext(fname)[0]
+                    print(f"Processing chapter: {chapter_name}")
+                    run_single_quiz_pipeline(chapter_name, input_source=input_source)
+        return
     else:  # spreadsheet
         process_chapter_to_sheet(None, chapter_title, None, input_source)
 
@@ -333,27 +347,51 @@ def run_batch_quiz_pipeline(input_source: str):
     else:
         raise ValueError("Invalid input source. Use 'spreadsheet' or 'file'.")
 
-# ======== Main ========
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run quiz pipeline for Gurukula content.")
-    parser.add_argument(
-        "--input_source",
-        type=str,
-        choices=["spreadsheet", "file"],
-        required=True,
-        help="Where to read the chapter text from: 'spreadsheet' or 'file'"
-    )
-    parser.add_argument(
-        "--chapter",
-        type=str,
-        help="Run quiz generation for a specific chapter (e.g. 'chapter16')"
-    )
+# ======== Google Doc Processing ========
+def process_chapter_to_sheet_gdoc(doc_link: str, num_questions: int, quiz_generator_fn=generate_quiz_json):
+    """
+    Process a chapter from a Google Doc link and number of questions.
+    Uses the doc title as the chapter_title for the spreadsheet tab.
+    """
+    creds = get_google_credentials()
+    chapter_title = get_gdoc_title(doc_link, creds)
+    chapter_text = read_chapter_text_from_gdoc(doc_link)
+    quiz_json = quiz_generator_fn(chapter_text, num_questions)
+    df = quiz_json_to_dataframe(chapter_title, quiz_json, num_questions)
+    spreadsheet_id, creds = upload_to_sheet(df, chapter_title)
+    apply_conditional_formatting(spreadsheet_id, chapter_title, df, creds)
+    print(f"✅ Done: {chapter_title}\n")
+    return spreadsheet_id
 
+# ======== Main ========
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input_source', choices=['file', 'spreadsheet', 'gdoc'], required=True)
+    parser.add_argument('--chapter', type=str, default=None)
     args = parser.parse_args()
 
-    if args.chapter:
-        run_single_quiz_pipeline(args.chapter, input_source=args.input_source)
+    input_source = args.input_source
+    chapter = args.chapter
+
+    if input_source == 'gdoc':
+        doc_link = app_config['documents']['link']
+        if chapter:
+            num_questions = app_config.get('chapter_question_counts', {}).get(chapter, 15)
+            print(f"Processing Google Doc for chapter '{chapter}' with {num_questions} questions...")
+            process_chapter_to_sheet_gdoc(doc_link, num_questions)
+        else:
+            # For now, process the single doc link in config
+            num_questions = 15
+            print(f"Processing Google Doc with default {num_questions} questions...")
+            process_chapter_to_sheet_gdoc(doc_link, num_questions)
+        return
+
+    if input_source == "file":
+        run_single_quiz_pipeline(chapter, input_source=input_source)
     else:
-        run_batch_quiz_pipeline(input_source=args.input_source)
+        run_batch_quiz_pipeline(input_source=input_source)
 
     log_and_print("Quiz generation pipeline started.")
+
+if __name__ == "__main__":
+    main()

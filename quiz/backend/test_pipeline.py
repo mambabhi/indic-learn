@@ -2,9 +2,8 @@
 # -*- coding: utf-8 -*-
 
 # from dotenv import load_dotenv; load_dotenv()
-from quiz.backend.gurukula_quizgen import run_single_quiz_pipeline
+from quiz.backend.gurukula_quizgen import run_single_quiz_pipeline, process_chapter_to_sheet_gdoc
 from quiz.backend.config import app_config
-
 
 # Load environment variables and app config
 INPUT_SPREADSHEET_NAME = app_config["spreadsheets"]["input_name"]
@@ -65,6 +64,14 @@ OUTPUT_SPREADSHEET_NAME = app_config["spreadsheets"]["output_name"]
 
 print("Starting test pipeline...")
 
-run_single_quiz_pipeline("chapter33", input_source="file")
+# run_single_quiz_pipeline("chapter33", input_source="file")
+
+# Example Google Doc link (replace with a real one for actual test)
+doc_link = "https://docs.google.com/document/d/1YyDyBCD-Wy4G6Kr_8PTBCxeMeJI6xjaUHGSca2xWVhQ/edit?usp=sharing"
+num_questions = 5
+
+spreadsheet_id = process_chapter_to_sheet_gdoc(doc_link, num_questions)
+assert spreadsheet_id is not None
+print(f"Tested Google Doc pipeline, spreadsheet id: {spreadsheet_id}")
 
 print("Test pipeline executed successfully")

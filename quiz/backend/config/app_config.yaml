@@ -2,5 +2,8 @@ spreadsheets:
   input_name: gurukula-story-master
   output_name: gurukula-quiz-master
 
+documents:
+  link: https://docs.google.com/document/d/1YyDyBCD-Wy4G6Kr_8PTBCxeMeJI6xjaUHGSca2xWVhQ/edit?tab=t.0
+
 chapter_question_counts:
-  chapter33: 2
+  chapter23: 2

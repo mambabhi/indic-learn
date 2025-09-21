@@ -23,7 +23,7 @@ Future modules coming soon include:
 
 📘 **Features of the `quiz` module**
 
-* Parallel SCQ and MCQ generation using dedicated Groq-hosted LLaMA3 agents via Agno.
+* Parallel SCQ and MCQ generation using dedicated Groq-hosted ChatGPT OSS agents via Agno.
 * Intelligent fallback strategy: if MCQ generation produces too few valid questions, SCQs are added to maintain the desired count.
 * Optional extra questions included for manual curation by Gurukula admins.
 * Automatic filtering of invalid or low-quality questions using format checks and semantic similarity deduplication.
@@ -71,25 +71,25 @@ For all invocations use: `backend/gurukula_quizgen.py`
 1. **Run a single chapter from file:**
 
 ```bash
-python -m quiz.backend.gurukula_quizgen.py --input_source file --chapter chapter23
+python -m quiz.backend.gurukula_quizgen --input_source file --chapter chapter23
 ```
 
 2. **Run all chapters in batch from file:**
 
 ```bash
-python -m quiz.backend.gurukula_quizgen.py --input_source file
+python -m quiz.backend.gurukula_quizgen --input_source file
 ```
 
 3. **Run a single chapter from Google Sheets:**
 
 ```bash
-python -m quiz.backend.gurukula_quizgen.py --input_source spreadsheet --chapter chapter23
+python -m quiz.backend.gurukula_quizgen --input_source spreadsheet --chapter chapter23
 ```
 
 4. **Run from Google Sheets (single or multiple tabs):**
 
 ```bash
-python -m quiz.backend.gurukula_quizgen.py --input_source spreadsheet
+python -m quiz.backend.gurukula_quizgen --input_source spreadsheet
 ```
 
 ---
@@ -148,9 +148,9 @@ Each chapter should be a separate tab. The layout within a tab should look like:
 
 ### ⚡ Parallel Quiz Generation
 
-* Uses **two LLaMA 3** models in **concurrent threads**:
+* Uses **ChatGPT OSS** model in **concurrent threads**:
 
-  * One model generates SCQs (Single Correct Questions)
+  * One generates SCQs (Single Correct Questions)
   * Another generates MCQs (Multiple Correct Questions)
 * Reduces generation time and avoids rate limits
 
@@ -176,7 +176,7 @@ Each chapter should be a separate tab. The layout within a tab should look like:
 
 ## 🛠 Tech Stack
 
-* 🧠 LLaMA3 via **Groq API** (served with Markdown using **Agno agent**)
+* 🧠 ChatGPT OSS via **Groq API** (served with Markdown using **Agno agent**)
 * 📊 Google Sheets API (via `gspread`, `googleapiclient`)
 * 🐍 Python 3.11
 * ✅ Configurable with `YAML`-based settings
@@ -186,7 +186,7 @@ Each chapter should be a separate tab. The layout within a tab should look like:
 ## 🧩 Key Functionality
 
 ### 1. Quiz Generation Pipeline
-- **Parallel Generation:** Two LLaMA 3 models (via Groq API and Agno agent) run in parallel threads—one for SCQs (single correct answer), one for MCQs (multiple correct answers).
+- **Parallel Generation:** ChatGPT OSS model (via Groq API and Agno agent) run in parallel threads—one for SCQs (single correct answer), one for MCQs (multiple correct answers).
 - **Prompt Engineering:** Carefully crafted prompts instruct LLMs to generate questions in strict JSON format, with clear rules for options, correct answers, and structure.
 - **Validation & Filtering:** MCQs are validated to ensure multiple correct options. Questions are deduplicated using text similarity checks.
 - **Fallback Logic:** If not enough valid MCQs are generated, extra SCQs are added to maintain the desired quiz size.

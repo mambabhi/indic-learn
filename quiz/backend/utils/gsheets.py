@@ -4,6 +4,7 @@ import os
 import json
 import base64
 import binascii
+import re
 from google.oauth2.service_account import Credentials
 from google.auth.transport.requests import Request
 from quiz.backend.config import env_config
@@ -116,4 +117,40 @@ def clear_all_sheet_formatting_only(sheets_api, spreadsheet_id, sheet_id):
         spreadsheetId=spreadsheet_id,
         body=request_body
     ).execute()
+
+def extract_gdoc_file_id(doc_link: str) -> str:
+    """
+    Extracts the file ID from a Google Doc URL.
+    """
+    match = re.search(r"/d/([a-zA-Z0-9_-]+)", doc_link)
+    if match:
+        return match.group(1)
+    raise ValueError(f"Invalid Google Doc link: {doc_link}")
+
+def get_gdoc_title(doc_link: str, creds) -> str:
+    """
+    Given a Google Doc link, fetches and returns the title of the document.
+    """
+    file_id = extract_gdoc_file_id(doc_link)
+    from googleapiclient.discovery import build
+    docs_service = build('docs', 'v1', credentials=creds)
+    doc = docs_service.documents().get(documentId=file_id).execute()
+    return doc.get("title", "Untitled")
+
+def read_chapter_text_from_gdoc(doc_link: str) -> str:
+    """
+    Given a Google Doc link, fetches and returns the full text content of the document.
+    """
+    from googleapiclient.discovery import build
+    file_id = extract_gdoc_file_id(doc_link)
+    creds = get_google_credentials()
+    docs_service = build('docs', 'v1', credentials=creds)
+    doc = docs_service.documents().get(documentId=file_id).execute()
+    content = []
+    for element in doc.get("body", {}).get("content", []):
+        if "paragraph" in element:
+            for run in element["paragraph"].get("elements", []):
+                text = run.get("textRun", {}).get("content", "")
+                content.append(text)
+    return "".join(content).strip()
 

@@ -252,7 +252,7 @@ def validate_mcqs(mcq_questions: list, min_valid: int) -> bool:
 
 
 def run_scq_only(chapter_text: str, num_scq: int):
-    scq_agent = build_english_quiz_agent("llama3-70b-8192")
+    scq_agent = build_english_quiz_agent("openai/gpt-oss-120b")
     parser = QuizParser()
     scq_prompt = build_prompt(chapter_text, num_scq, "SCQ")
     log_and_print(f"🔍 Running SCQ generation with prompt:\n{scq_prompt}\n")
@@ -264,7 +264,7 @@ def run_scq_only(chapter_text: str, num_scq: int):
 
 
 def run_mcq_with_retries(chapter_text: str, num_mcq: int, max_retries: int = 1):
-    mcq_agent = build_english_quiz_agent("llama-3.3-70b-versatile")
+    mcq_agent = build_english_quiz_agent("openai/gpt-oss-120b")
     mcq_prompt = build_prompt(chapter_text, num_mcq, "MCQ")  # Over-generate
     log_and_print(f"🔍 Running MCQ generation with prompt:\n{mcq_prompt}\n")
 

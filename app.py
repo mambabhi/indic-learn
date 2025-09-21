@@ -39,9 +39,65 @@ def get_all_chapters(spreadsheet_url):
     except Exception as e:
         return f"❌ Failed to read spreadsheet: {str(e)}"
 
-def generate_quiz(input_link, output_link, specific_chapter, chapter_list, progress=gr.Progress()):
+def is_valid_gdoc_url(url: str) -> bool:
+    return (
+        isinstance(url, str)
+        and url.startswith("https://docs.google.com/")
+        and "/document/" in url
+        and len(url.strip()) > 40
+    )
+
+def generate_quiz(
+    input_mode,
+    gdoc_links,
+    gdoc_num_questions,
+    input_link,
+    output_link,
+    specific_chapter,
+    chapter_list,
+    progress=gr.Progress()
+):
     global processed_today
     logs = []
+
+    if input_mode == "Google Docs":
+        valid_pairs = []
+        for link, num in zip(gdoc_links, gdoc_num_questions):
+            link = link.strip()
+            num = num.strip()
+            if link:
+                if not is_valid_gdoc_url(link):
+                    return f"❌ Invalid Google Doc link: {link}", logs
+                if num:
+                    if not num.isdigit():
+                        return f"❌ Number of questions must be numeric for link: {link}", logs
+                    n = int(num)
+                    if n < 2 or n > 20:
+                        return f"❌ Number of questions must be between 2 and 20 for link: {link}", logs
+                else:
+                    n = 15
+                valid_pairs.append((link, n))
+            elif num:
+                return "❌ Number of questions provided without a Google Doc link.", logs
+        if not valid_pairs:
+            return "❌ Please provide at least one Google Doc link.", logs
+        today = datetime.date.today()
+        if len(processed_today) >= 6:
+            return "⚠️ Daily limit of 6 docs reached.", logs
+        count_to_process = min(6 - len(processed_today), len(valid_pairs))
+        valid_pairs = valid_pairs[:count_to_process]
+        progress(0)
+        for i, (link, n) in enumerate(valid_pairs):
+            try:
+                logs.append(f"📘 Processing GDoc: {link} with {n} questions...")
+                from quiz.backend.gurukula_quizgen import process_chapter_to_sheet_gdoc
+                spreadsheet_id = process_chapter_to_sheet_gdoc(link, n)
+                logs.append(f"✅ Completed: {link} → Sheet ID: {spreadsheet_id}")
+                processed_today.append((link, today))
+            except Exception as e:
+                logs.append(f"❌ Error processing {link}: {str(e)}")
+            progress((i + 1) / count_to_process)
+        return f"✅ {len(valid_pairs)} Google Doc(s) processed successfully.", logs
 
     # --- Validation ---
     if not is_valid_gsheet_url(input_link):
@@ -85,6 +141,20 @@ def generate_quiz(input_link, output_link, specific_chapter, chapter_list, progr
 
     return f"✅ {len(chapters)} chapter(s) processed successfully.", logs
 
+def gdoc_input_filter(input_mode, *args):
+    gdoc_links = args[:3]
+    gdoc_num_questions = args[3:6]
+    rest = args[6:]
+    if input_mode == "Google Docs":
+        filtered = [(l, n) for l, n in zip(gdoc_links, gdoc_num_questions) if l.strip()]
+        if filtered:
+            links, nums = zip(*filtered)
+            return [input_mode, list(links), list(nums)] + list(rest)
+        else:
+            return [input_mode, [], []] + list(rest)
+    else:
+        return [input_mode, [], []] + list(rest)
+
 # ======================
 # Gradio UI
 # ======================
@@ -92,23 +162,49 @@ with gr.Blocks(title="Gurukula Admin Portal") as demo:
     with gr.Tabs():
         with gr.Tab("Quiz Generator"):
             gr.Markdown("### ✍️ Generate Quiz from Indic Story Chapters")
-            gr.Markdown("ℹ️ **Note:** If no specific chapters are entered, the first 6 chapters from the input spreadsheet will be processed.")
 
-            input_link = gr.Textbox(label="Input Spreadsheet URL", placeholder="https://docs.google.com/...")
-            output_link = gr.Textbox(label="Output Spreadsheet URL", placeholder="https://docs.google.com/...")
-            specific_chapter = gr.Textbox(label="Process Only This Chapter (Optional)")
-            chapter_list = gr.Textbox(
-                label="List of Chapters (comma-separated) – optional but recommended (runs first 6 if left blank)", 
-                placeholder="chapter1, chapter2"
-            )
+            input_mode = gr.Radio([
+                "Google Docs", "Spreadsheets"
+            ], value="Google Docs", label="Input Source")
+
+            with gr.Column(visible=True) as gdoc_ui:
+                gdoc_links = []
+                gdoc_num_questions = []
+                for i in range(3):
+                    with gr.Row():
+                        gdoc_link = gr.Textbox(label=f"Chapter Link {i+1}", placeholder="https://docs.google.com/document/...")
+                        num_questions = gr.Textbox(label="Num Questions", placeholder="15")
+                        gdoc_links.append(gdoc_link)
+                        gdoc_num_questions.append(num_questions)
+
+            with gr.Column(visible=False) as spreadsheet_ui:
+                gr.Markdown("ℹ️ **Note:** If no specific chapters are entered, the first 6 chapters from the input spreadsheet will be processed.")
+                input_link = gr.Textbox(label="Input Spreadsheet URL", placeholder="https://docs.google.com/...")
+                output_link = gr.Textbox(label="Output Spreadsheet URL", placeholder="https://docs.google.com/...")
+                specific_chapter = gr.Textbox(label="Process Only This Chapter (Optional)")
+                chapter_list = gr.Textbox(
+                    label="List of Chapters (comma-separated) – optional but recommended (runs first 6 if left blank)", 
+                    placeholder="chapter1, chapter2"
+                )
 
             run_button = gr.Button("Generate Quiz")
             output_text = gr.Textbox(label="Status", lines=1, interactive=False)
             output_logs = gr.Textbox(label="Logs", lines=10, interactive=False)
 
+            def toggle_ui(mode):
+                return (
+                    gr.update(visible=(mode == "Google Docs")),
+                    gr.update(visible=(mode == "Spreadsheets"))
+                )
+            input_mode.change(
+                toggle_ui,
+                inputs=[input_mode],
+                outputs=[gdoc_ui, spreadsheet_ui]
+            )
+
             run_button.click(
-                fn=generate_quiz,
-                inputs=[input_link, output_link, specific_chapter, chapter_list],
+                fn=lambda *args: generate_quiz(*gdoc_input_filter(*args)),
+                inputs=[input_mode, *gdoc_links, *gdoc_num_questions, input_link, output_link, specific_chapter, chapter_list],
                 outputs=[output_text, output_logs]
             )
 
