@@ -31,3 +31,12 @@ assets/
 # Logs
 *.log
 logs
+
+# Misc - Temporary implementation notes (session-specific, not for commit)
+IMPLEMENTATION_GUIDE.md
+IMPLEMENTATION_SUMMARY.md
+
+# AI Assistant Documentation (COMMIT THESE)
+# .claud/ - Contains project documentation for AI assistants
+# quiz/backend/CLAUDE.md - Technical guide (should be committed)
+# quiz/backend/TESTING_*.md - Testing guides (should be committed)

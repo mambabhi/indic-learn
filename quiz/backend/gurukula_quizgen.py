@@ -31,6 +31,76 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 # Navigate up one directory (from 'backend' to 'quiz') and then into 'data'
 DATA_DIR = os.path.join(CURRENT_DIR, '..', 'data')
 
+# ======== UTILITY: Extract spreadsheet ID from link ========
+def extract_spreadsheet_id(spreadsheet_link: str) -> str:
+    """
+    Extract spreadsheet ID from a Google Sheets URL.
+
+    Supported formats:
+    - https://docs.google.com/spreadsheets/d/{ID}/edit...
+    - https://docs.google.com/spreadsheets/d/{ID}
+    - {ID} (raw ID)
+
+    Args:
+        spreadsheet_link: A Google Sheets URL or spreadsheet ID
+
+    Returns:
+        The spreadsheet ID
+
+    Raises:
+        ValueError: If the link format is invalid
+    """
+    if '/' not in spreadsheet_link:
+        return spreadsheet_link.strip()
+
+    match = re.search(r'/spreadsheets/d/([a-zA-Z0-9-_]+)', spreadsheet_link)
+    if not match:
+        raise ValueError(
+            f"❌ Invalid Google Sheets link format.\n"
+            f"   Expected: https://docs.google.com/spreadsheets/d/{{SPREADSHEET_ID}}/...\n"
+            f"   Got: {spreadsheet_link}"
+        )
+
+    return match.group(1)
+
+def validate_spreadsheet_by_id(spreadsheet_id: str, creds) -> bool:
+    """
+    Validate if a spreadsheet ID is accessible.
+    Uses direct ID lookup instead of name search (more efficient and scalable).
+
+    Args:
+        spreadsheet_id: The Google Sheets spreadsheet ID
+        creds: Google credentials
+
+    Returns:
+        True if accessible, raises ValueError if not
+    """
+    try:
+        client = gspread.authorize(creds)
+        spreadsheet = client.open_by_key(spreadsheet_id)
+        print(f"✅ Output spreadsheet validated and accessible (ID: {spreadsheet_id}).")
+        return True
+    except gspread.exceptions.SpreadsheetNotFound:
+        raise ValueError(
+            f"❌ Spreadsheet with ID '{spreadsheet_id}' not found or is NOT accessible.\n"
+            f"   Reason: The spreadsheet is either:\n"
+            f"   1. Not shared with the service account\n"
+            f"   2. Does not exist\n"
+            f"   Solution: Please ensure the spreadsheet exists and is shared with the service account."
+        )
+    except gspread.exceptions.APIError as e:
+        raise ValueError(
+            f"❌ API Error accessing spreadsheet (ID: {spreadsheet_id}):\n"
+            f"   {str(e)}\n"
+            f"   Please verify the spreadsheet is shared with the service account."
+        )
+    except Exception as e:
+        raise ValueError(
+            f"❌ Unexpected error validating spreadsheet (ID: {spreadsheet_id}):\n"
+            f"   {str(e)}\n"
+            f"   Please verify the spreadsheet is shared with the service account."
+        )
+
 # ======== STEP 1: Run Agent and Get JSON ========
 def generate_quiz_json(chapter_text: str, num_questions: int = 15) -> dict:
     quiz = run_parallel_quiz_with_mcq_retry(chapter_text, num_questions)
@@ -92,32 +162,123 @@ def quiz_json_to_dataframe(chapter_title: str, quiz_json: dict, num_questions: i
     
 
 # ======== STEP 3: Upload to Google Sheet ========
-def upload_to_sheet(df: pd.DataFrame, chapter_title: str):
+def check_spreadsheet_exists_in_drive(spreadsheet_name: str, creds) -> bool:
+    """
+    Check if a spreadsheet exists in Google Drive (without requiring access).
+    Uses Google Drive API to search for the spreadsheet by name.
+    Returns True if found, False otherwise.
+    """
+    try:
+        drive_service = build('drive', 'v3', credentials=creds)
+        results = drive_service.files().list(
+            q=f"name='{spreadsheet_name}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false",
+            spaces='drive',
+            pageSize=1,
+            fields='files(id, name)'
+        ).execute()
+        files = results.get('files', [])
+        return len(files) > 0
+    except Exception:
+        # If Drive API call fails, we can't determine, so return None
+        return None
+
+def validate_output_spreadsheet(spreadsheet_name: str, creds) -> bool:
+    """
+    Validate if the output spreadsheet exists and is accessible.
+    Provides specific error messages for different failure scenarios.
+    Returns True if valid, raises ValueError if not.
+    """
+    try:
+        client = gspread.authorize(creds)
+        client.open(spreadsheet_name)
+        print(f"✅ Output spreadsheet '{spreadsheet_name}' validated and accessible.")
+        return True
+    except gspread.exceptions.SpreadsheetNotFound:
+        # Check if spreadsheet exists but is just not shared
+        spreadsheet_exists = check_spreadsheet_exists_in_drive(spreadsheet_name, creds)
+        
+        if spreadsheet_exists:
+            # Spreadsheet exists but not shared with service account
+            raise ValueError(
+                f"❌ Output spreadsheet '{spreadsheet_name}' exists but is NOT accessible.\n"
+                f"   Reason: The spreadsheet is NOT shared with the service account.\n"
+                f"   Solution: Please share the spreadsheet with the service account email address."
+            )
+        elif spreadsheet_exists is False:
+            # Spreadsheet doesn't exist
+            raise ValueError(
+                f"❌ Output spreadsheet '{spreadsheet_name}' does not exist.\n"
+                f"   Reason: A spreadsheet with this name could not be found in Google Drive.\n"
+                f"   Solution: Please create the spreadsheet first, then try again."
+            )
+        else:
+            # Can't determine, fall back to generic message
+            raise ValueError(
+                f"❌ Output spreadsheet '{spreadsheet_name}' is not accessible.\n"
+                f"   Reason: The spreadsheet is either:\n"
+                f"   1. Not shared with the service account\n"
+                f"   2. Does not exist\n"
+                f"   Please ensure the spreadsheet exists and is shared with the service account."
+            )
+    except gspread.exceptions.APIError as e:
+        raise ValueError(
+            f"❌ API Error accessing spreadsheet '{spreadsheet_name}':\n"
+            f"   {str(e)}\n"
+            f"   Please verify the spreadsheet is shared with the service account."
+        )
+    except Exception as e:
+        raise ValueError(
+            f"❌ Unexpected error validating spreadsheet '{spreadsheet_name}':\n"
+            f"   {str(e)}\n"
+            f"   Please verify the spreadsheet is shared with the service account."
+        )
+    
+def upload_to_sheet(df: pd.DataFrame, chapter_title: str, output_spreadsheet_link: Optional[str] = None):
+    """
+    Upload quiz data to a Google Sheet.
+
+    Args:
+        df: DataFrame with quiz data
+        chapter_title: Title of the chapter/worksheet
+        output_spreadsheet_link: Google Sheets link or ID (optional)
+                                If not provided, uses default from config
+    """
     print("Uploading to Google Sheet...")
 
     creds = get_google_credentials()
     if not creds or not creds.valid:
         raise ValueError("Invalid Google service account credentials.")
-    
+
     try:
-       client = gspread.authorize(creds)
+        client = gspread.authorize(creds)
     except Exception as e:
         raise ValueError(f"Failed to authorize with Google Sheets API: {str(e)}")
 
     print("Google sheets authorized...")
 
-    spreadsheet = client.open(OUTPUT_SPREADSHEET_NAME)
+    # Determine which spreadsheet to use
+    if output_spreadsheet_link:
+        spreadsheet_id = extract_spreadsheet_id(output_spreadsheet_link)
+        print(f"📊 Using custom output spreadsheet (ID: {spreadsheet_id})")
+        validate_spreadsheet_by_id(spreadsheet_id, creds)
+        try:
+            spreadsheet = client.open_by_key(spreadsheet_id)
+        except gspread.exceptions.SpreadsheetNotFound:
+            raise ValueError(f"❌ Spreadsheet with ID '{spreadsheet_id}' not found or not accessible.")
+    else:
+        # Legacy: use name-based lookup for backward compatibility
+        spreadsheet_name = OUTPUT_SPREADSHEET_NAME
+        print(f"📊 Using default output spreadsheet: '{spreadsheet_name}'")
+        spreadsheet = client.open(spreadsheet_name)
 
     print("Spreadsheet opened for update...")
 
-    # Check if sheet with chapter_title exists, else create it
     try:
         worksheet = spreadsheet.worksheet(chapter_title)
     except gspread.exceptions.WorksheetNotFound:
         worksheet = spreadsheet.add_worksheet(title=chapter_title, rows=100, cols=20)
 
     worksheet.clear()
-
     worksheet.update([df.columns.values.tolist()] + df.values.tolist())
 
     print("✅ Google Sheet updated.")
@@ -261,6 +422,7 @@ def process_chapter_to_sheet(
     chapter_title: str,
     num_questions: Optional[int],
     input_source: str,
+    output_spreadsheet_link: Optional[str] = None,
     quiz_generator_fn=generate_quiz_json,
 ):
     if input_source == "spreadsheet":
@@ -284,14 +446,14 @@ def process_chapter_to_sheet(
 
     df = quiz_json_to_dataframe(chapter_title, quiz_json, num_questions if num_questions is not None else 15)
 
-    spreadsheet_id, creds = upload_to_sheet(df, chapter_title)
+    spreadsheet_id, creds = upload_to_sheet(df, chapter_title, output_spreadsheet_link)
     apply_conditional_formatting(spreadsheet_id, chapter_title, df, creds)
     print(f"✅ Done: {chapter_title}\n")
 
     return spreadsheet_id  # Optional return
 
 # ======== Processing Single Chapter ========
-def run_single_quiz_pipeline(chapter_title: str, input_source: str):
+def run_single_quiz_pipeline(chapter_title: str, input_source: str, output_spreadsheet_link: Optional[str] = None):
     if input_source == "file":
         data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
         if chapter_title:
@@ -304,20 +466,20 @@ def run_single_quiz_pipeline(chapter_title: str, input_source: str):
             chapter_path = f"{DATA_DIR}/{chapter_title}.txt"
             if not os.path.exists(chapter_path):
                 raise FileNotFoundError(f"No such chapter text file: {chapter_path}")
-            process_chapter_to_sheet(chapter_path, chapter_title, num_questions, input_source)
+            process_chapter_to_sheet(chapter_path, chapter_title, num_questions, input_source, output_spreadsheet_link)
         else:
             # Process all .txt files in /data
             for fname in os.listdir(data_dir):
                 if fname.endswith('.txt'):
                     chapter_name = os.path.splitext(fname)[0]
                     print(f"Processing chapter: {chapter_name}")
-                    run_single_quiz_pipeline(chapter_name, input_source=input_source)
+                    run_single_quiz_pipeline(chapter_name, input_source=input_source, output_spreadsheet_link=output_spreadsheet_link)
         return
     else:  # spreadsheet
-        process_chapter_to_sheet(None, chapter_title, None, input_source)
+        process_chapter_to_sheet(None, chapter_title, None, input_source, output_spreadsheet_link)
 
 # ======== Processing Chapters in Batch ========
-def run_batch_quiz_pipeline(input_source: str):        
+def run_batch_quiz_pipeline(input_source: str, output_spreadsheet_link: Optional[str] = None):        
     if input_source == "file":
         quiz_counts = app_config.get("chapter_question_counts", {})
         for filename in os.listdir(DATA_DIR):
@@ -325,7 +487,7 @@ def run_batch_quiz_pipeline(input_source: str):
                 chapter_path = os.path.join(DATA_DIR, filename)
                 chapter_title = filename.replace(".txt", "").strip()
                 num_questions = quiz_counts.get(chapter_title.lower(), 15)
-                process_chapter_to_sheet(chapter_path, chapter_title, num_questions, input_source)
+                process_chapter_to_sheet(chapter_path, chapter_title, num_questions, input_source, output_spreadsheet_link)
     elif input_source == "spreadsheet":  # spreadsheet
         # ===== Get all sheet/tab names from input spreadsheet =====
         print(f"📘 Reading chapters from spreadsheet: {INPUT_SPREADSHEET_NAME}")
@@ -343,12 +505,12 @@ def run_batch_quiz_pipeline(input_source: str):
         chapter_titles = [sheet.title for sheet in sheet_list]
         
         for chapter_title in chapter_titles:
-            process_chapter_to_sheet(None, chapter_title, None, input_source)
+            process_chapter_to_sheet(None, chapter_title, None, input_source, output_spreadsheet_link)
     else:
         raise ValueError("Invalid input source. Use 'spreadsheet' or 'file'.")
 
 # ======== Google Doc Processing ========
-def process_chapter_to_sheet_gdoc(doc_link: str, num_questions: int, quiz_generator_fn=generate_quiz_json):
+def process_chapter_to_sheet_gdoc(doc_link: str, num_questions: int, output_spreadsheet_link: Optional[str] = None, quiz_generator_fn=generate_quiz_json):
     """
     Process a chapter from a Google Doc link and number of questions.
     Uses the doc title as the chapter_title for the spreadsheet tab.
@@ -358,38 +520,203 @@ def process_chapter_to_sheet_gdoc(doc_link: str, num_questions: int, quiz_genera
     chapter_text = read_chapter_text_from_gdoc(doc_link)
     quiz_json = quiz_generator_fn(chapter_text, num_questions)
     df = quiz_json_to_dataframe(chapter_title, quiz_json, num_questions)
-    spreadsheet_id, creds = upload_to_sheet(df, chapter_title)
+    spreadsheet_id, creds = upload_to_sheet(df, chapter_title, output_spreadsheet_link)
     apply_conditional_formatting(spreadsheet_id, chapter_title, df, creds)
     print(f"✅ Done: {chapter_title}\n")
     return spreadsheet_id
 
+# ======== Google Doc to Spreadsheet Workflow ========
+def run_gdoc_to_spreadsheet_workflow(
+    input_doc_link: str,
+    output_spreadsheet_link: str,
+    num_questions: int = 15,
+    quiz_generator_fn=generate_quiz_json
+):
+    """
+    Read content from a Google Doc and write quiz to a Google Spreadsheet.
+    This is the default unified workflow.
+
+    Args:
+        input_doc_link: Google Doc link to read chapter text from
+        output_spreadsheet_link: Google Sheets link to write quiz to
+        num_questions: Number of questions to generate
+        quiz_generator_fn: Function to generate quiz (default: generate_quiz_json)
+
+    Returns:
+        spreadsheet_id: The ID of the spreadsheet where quiz was written
+    """
+    print("=" * 60)
+    print("🔄 Google Doc → Quiz → Google Spreadsheet Workflow")
+    print("=" * 60)
+
+    creds = get_google_credentials()
+
+    print(f"📖 Reading from Google Doc: {input_doc_link}")
+    chapter_title = get_gdoc_title(input_doc_link, creds)
+    chapter_text = read_chapter_text_from_gdoc(input_doc_link)
+    print(f"✅ Retrieved chapter: {chapter_title}")
+
+    print(f"📘 Generating quiz with {num_questions} questions...")
+    quiz_json = quiz_generator_fn(chapter_text, num_questions)
+    print(f"✅ Quiz generated: {quiz_json['Topic']}")
+
+    df = quiz_json_to_dataframe(chapter_title, quiz_json, num_questions)
+
+    spreadsheet_id, creds = upload_to_sheet(df, chapter_title, output_spreadsheet_link)
+    apply_conditional_formatting(spreadsheet_id, chapter_title, df, creds)
+
+    print(f"✅ Done: {chapter_title}\n")
+    return spreadsheet_id
+
+def run_batch_gdoc_to_spreadsheet_workflow(batch_config: list):
+    """
+    Process multiple Google Doc to Spreadsheet pairs in batch.
+
+    Args:
+        batch_config: List of dicts with input_link, output_link, and num_questions
+
+    Returns:
+        results: List of dicts with processing results (success/failed)
+    """
+    print("=" * 60)
+    print(f"🔄 Batch Processing: {len(batch_config)} documents")
+    print("=" * 60)
+
+    results = []
+    for idx, config in enumerate(batch_config, 1):
+        input_link = config.get('input_link')
+        output_link = config.get('output_link')
+        num_questions = config.get('num_questions', 15)
+
+        if not input_link or not output_link:
+            print(f"❌ Skipping batch item {idx}: missing input_link or output_link")
+            continue
+
+        print(f"\n[{idx}/{len(batch_config)}] Processing...")
+        try:
+            spreadsheet_id = run_gdoc_to_spreadsheet_workflow(
+                input_link,
+                output_link,
+                num_questions
+            )
+            results.append({
+                'index': idx,
+                'status': 'success',
+                'spreadsheet_id': spreadsheet_id
+            })
+        except Exception as e:
+            print(f"❌ Error processing batch item {idx}: {str(e)}")
+            results.append({
+                'index': idx,
+                'status': 'failed',
+                'error': str(e)
+            })
+
+    print("\n" + "=" * 60)
+    print("📊 Batch Processing Summary")
+    print("=" * 60)
+    successful = sum(1 for r in results if r['status'] == 'success')
+    failed = sum(1 for r in results if r['status'] == 'failed')
+    print(f"✅ Successful: {successful}/{len(batch_config)}")
+    print(f"❌ Failed: {failed}/{len(batch_config)}")
+
+    return results
+
 # ======== Main ========
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--input_source', choices=['file', 'spreadsheet', 'gdoc'], required=True)
-    parser.add_argument('--chapter', type=str, default=None)
+    parser = argparse.ArgumentParser(
+        description="Quiz generation pipeline with multiple modes"
+    )
+
+    parser.add_argument(
+        '--mode',
+        choices=['default_quiz_gen', 'file', 'spreadsheet'],
+        default='default_quiz_gen',
+        help='Quiz generation mode: default_quiz_gen (default), file, or spreadsheet'
+    )
+    parser.add_argument(
+        '--chapter',
+        type=str,
+        default=None,
+        help='Specific chapter to process (optional)'
+    )
+    parser.add_argument(
+        '--output_spreadsheet',
+        type=str,
+        default=None,
+        help='Custom output spreadsheet link or ID (optional)'
+    )
+    parser.add_argument(
+        '--num_questions',
+        type=int,
+        default=None,
+        help='Number of questions to generate (overrides config value)'
+    )
+    parser.add_argument(
+        '--batch',
+        action='store_true',
+        help='Use batch mode for default_quiz_gen (processes multiple doc/sheet pairs from config)'
+    )
+
     args = parser.parse_args()
 
-    input_source = args.input_source
-    chapter = args.chapter
+    # ===== Default Quiz Generation Mode =====
+    if args.mode == 'default_quiz_gen':
+        doc_config = app_config.get('source_documents', {})
 
-    if input_source == 'gdoc':
-        doc_link = app_config['documents']['link']
-        if chapter:
-            num_questions = app_config.get('chapter_question_counts', {}).get(chapter, 15)
-            print(f"Processing Google Doc for chapter '{chapter}' with {num_questions} questions...")
-            process_chapter_to_sheet_gdoc(doc_link, num_questions)
-        else:
-            # For now, process the single doc link in config
-            num_questions = 15
-            print(f"Processing Google Doc with default {num_questions} questions...")
-            process_chapter_to_sheet_gdoc(doc_link, num_questions)
+        # Batch mode
+        if args.batch:
+            batch_config = doc_config.get('batch', [])
+            if not batch_config:
+                raise ValueError(
+                    "❌ No batch configuration found in app_config.yaml\n"
+                    "   Please add:\n"
+                    "   source_documents:\n"
+                    "     batch:\n"
+                    "       - input_link: ...\n"
+                    "         output_link: ...\n"
+                    "         num_questions: 15"
+                )
+            run_batch_gdoc_to_spreadsheet_workflow(batch_config)
+            return
+
+        # Single pair mode
+        if not doc_config.get('input_link'):
+            raise ValueError(
+                "❌ Missing 'source_documents.input_link' in app_config.yaml\n"
+                "   Please add:\n"
+                "   source_documents:\n"
+                "     input_link: https://docs.google.com/document/d/{DOC_ID}/edit\n"
+                "     output_link: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit\n"
+                "     num_questions: 15"
+            )
+
+        if not doc_config.get('output_link'):
+            raise ValueError(
+                "❌ Missing 'source_documents.output_link' in app_config.yaml\n"
+                "   Please add:\n"
+                "   source_documents:\n"
+                "     input_link: https://docs.google.com/document/d/{DOC_ID}/edit\n"
+                "     output_link: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit\n"
+                "     num_questions: 15"
+            )
+
+        input_doc_link = doc_config['input_link']
+        output_spreadsheet_link = doc_config['output_link']
+        num_questions = args.num_questions or doc_config.get('num_questions', 15)
+
+        run_gdoc_to_spreadsheet_workflow(input_doc_link, output_spreadsheet_link, num_questions)
         return
 
+    # ===== File/Spreadsheet Modes (Legacy) =====
+    input_source = args.mode
+    chapter = args.chapter
+    output_spreadsheet_link = args.output_spreadsheet
+
     if input_source == "file":
-        run_single_quiz_pipeline(chapter, input_source=input_source)
+        run_single_quiz_pipeline(chapter, input_source=input_source, output_spreadsheet_link=output_spreadsheet_link)
     else:
-        run_batch_quiz_pipeline(input_source=input_source)
+        run_batch_quiz_pipeline(input_source=input_source, output_spreadsheet_link=output_spreadsheet_link)
 
     log_and_print("Quiz generation pipeline started.")
 

@@ -5,5 +5,18 @@ spreadsheets:
 documents:
   link: https://docs.google.com/document/d/1YyDyBCD-Wy4G6Kr_8PTBCxeMeJI6xjaUHGSca2xWVhQ/edit?tab=t.0
 
+source_documents:
+  input_link: https://docs.google.com/document/d/1YyDyBCD-Wy4G6Kr_8PTBCxeMeJI6xjaUHGSca2xWVhQ/edit?tab=t.0
+  output_link: https://docs.google.com/spreadsheets/d/1CjlRPHaJcJbPiw9XG2Ansll3310E305NAC8Wxan8pCc/edit?usp=sharing
+  num_questions: 5
+
+  batch:
+    - input_link: https://docs.google.com/document/d/1YyDyBCD-Wy4G6Kr_8PTBCxeMeJI6xjaUHGSca2xWVhQ/edit?tab=t.0
+      output_link: https://docs.google.com/spreadsheets/d/1CjlRPHaJcJbPiw9XG2Ansll3310E305NAC8Wxan8pCc/edit?gid=848462070#gid=848462070
+      num_questions: 3
+    - input_link: https://docs.google.com/document/d/1Gu641957A8-gqK9rYeniepgVShG2VoUcAZ7w19NSg0M/edit?tab=t.0
+      output_link: https://docs.google.com/spreadsheets/d/192midlLKZ3ZCQorbNYtBzUzL8wbwhXn4M1DXfTGpg74/edit?gid=2135950899#gid=2135950899
+      num_questions: 3
+
 chapter_question_counts:
   chapter23: 2

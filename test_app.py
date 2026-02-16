@@ -1,15 +1,19 @@
 import sys
 import os
 import re
+from typing import Union
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
 
 import gradio as gr
-from quiz.backend.gurukula_quizgen import process_chapter_to_sheet
+from quiz.backend.gurukula_quizgen import (
+    run_gdoc_to_spreadsheet_workflow,
+)
 import gspread
 from quiz.backend.utils.gsheets import get_google_credentials
 import datetime
 
 def is_valid_gsheet_url(url: str) -> bool:
+    """Validate Google Sheets URL format"""
     return (
         isinstance(url, str)
         and url.startswith("https://docs.google.com/")
@@ -17,26 +21,8 @@ def is_valid_gsheet_url(url: str) -> bool:
         and len(url.strip()) > 40
     )
 
-def extract_sheet_id(url: str) -> str:
-    try:
-        return url.split("/d/")[1].split("/")[0]
-    except IndexError:
-        return ""
-
-def is_valid_chapter_list(chapter_list: str) -> bool:
-    chapters = [c.strip() for c in chapter_list.split(",") if c.strip()]
-    return all(re.fullmatch(r"[A-Za-z0-9]+", c) for c in chapters)
-
-def get_all_chapters(spreadsheet_url):
-    try:
-        creds = get_google_credentials()
-        client = gspread.authorize(creds)
-        sheet = client.open_by_url(spreadsheet_url)
-        return [ws.title for ws in sheet.worksheets()]
-    except Exception as e:
-        return f"❌ Failed to read spreadsheet: {str(e)}"
-
 def is_valid_gdoc_url(url: str) -> bool:
+    """Validate Google Doc URL format"""
     return (
         isinstance(url, str)
         and url.startswith("https://docs.google.com/")
@@ -44,100 +30,105 @@ def is_valid_gdoc_url(url: str) -> bool:
         and len(url.strip()) > 40
     )
 
+def is_valid_num_questions(num_str: str) -> tuple[bool, Union[int, None]]:
+    """
+    Validate and parse number of questions.
+    Returns (is_valid, num_questions)
+    """
+    if not num_str or not num_str.strip():
+        return True, 15  # Default to 15 if empty
+    
+    try:
+        n = int(num_str.strip())
+        if n < 1 or n > 30:
+            return False, None
+        return True, n
+    except ValueError:
+        return False, None
+
 def generate_quiz(
-    input_mode,
-    gdoc_links,
-    gdoc_num_questions,
-    input_link,
-    output_link,
-    specific_chapter,
-    chapter_list,
+    gdoc_link_1,
+    num_questions_1,
+    gdoc_link_2,
+    num_questions_2,
+    gdoc_link_3,
+    num_questions_3,
+    output_spreadsheet,
     progress=gr.Progress()
 ):
+    """
+    Generate quiz from Google Docs and write to spreadsheet.
+    
+    Args:
+        gdoc_link_1, gdoc_link_2, gdoc_link_3: Google Doc URLs
+        num_questions_1, num_questions_2, num_questions_3: Number of questions for each doc
+        output_spreadsheet: Output Google Sheets URL
+        progress: Gradio progress tracker
+    """
     logs = []
 
-    if input_mode == "Google Docs":
-        valid_pairs = []
-        for link, num in zip(gdoc_links, gdoc_num_questions):
-            link = link.strip()
-            num = num.strip()
-            if link:
-                if not is_valid_gdoc_url(link):
-                    return f"❌ Invalid Google Doc link: {link}", logs
-                if num:
-                    if not num.isdigit():
-                        return f"❌ Number of questions must be numeric for link: {link}", logs
-                    n = int(num)
-                    if n < 2 or n > 20:
-                        return f"❌ Number of questions must be between 2 and 20 for link: {link}", logs
-                else:
-                    n = 15
-                valid_pairs.append((link, n))
-            elif num:
-                return "❌ Number of questions provided without a Google Doc link.", logs
-        if not valid_pairs:
-            return "❌ Please provide at least one Google Doc link.", logs
-        count_to_process = len(valid_pairs)
-        progress(0)
-        for i, (link, n) in enumerate(valid_pairs):
-            try:
-                logs.append(f"📘 Processing GDoc: {link} with {n} questions...")
-                from quiz.backend.gurukula_quizgen import process_chapter_to_sheet_gdoc
-                spreadsheet_id = process_chapter_to_sheet_gdoc(link, n)
-                logs.append(f"✅ Completed: {link} → Sheet ID: {spreadsheet_id}")
-            except Exception as e:
-                logs.append(f"❌ Error processing {link}: {str(e)}")
-            progress((i + 1) / count_to_process)
-        return f"✅ {len(valid_pairs)} Google Doc(s) processed successfully.", logs
-
-    # --- Validation ---
-    if not is_valid_gsheet_url(input_link):
-        return "❌ Invalid Input Spreadsheet URL. Please provide a valid Google Sheets link.", logs
-    if not is_valid_gsheet_url(output_link):
-        return "❌ Invalid Output Spreadsheet URL. Please provide a valid Google Sheets link.", logs
-    if extract_sheet_id(input_link) == extract_sheet_id(output_link):
-        return "❌ Input and Output Spreadsheet URLs must be different.", logs
-
-    if chapter_list and not is_valid_chapter_list(chapter_list):
-        return "❌ Invalid chapter list. Use only alphanumeric names, separated by commas (e.g., chapter1, chapter2).", logs
-
-    chapters = []
-    if specific_chapter:
-        chapters = [specific_chapter.strip()]
-    elif chapter_list:
-        chapters = [c.strip() for c in chapter_list.split(",") if c.strip()]
-    else:
-        result = get_all_chapters(input_link)
-        if isinstance(result, str):  # error
-            return result, logs
-        chapters = result
-
-    count_to_process = len(chapters)
+    # Validate output spreadsheet
+    if not output_spreadsheet or not output_spreadsheet.strip():
+        return "❌ Output Spreadsheet URL is required.", logs
+    
+    if not is_valid_gsheet_url(output_spreadsheet):
+        return "❌ Invalid Output Spreadsheet URL format. Please provide a valid Google Sheets link (e.g., https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit).", logs
+    
+    # Collect valid doc pairs
+    valid_pairs = []
+    doc_inputs = [
+        (gdoc_link_1, num_questions_1),
+        (gdoc_link_2, num_questions_2),
+        (gdoc_link_3, num_questions_3)
+    ]
+    
+    for idx, (link, num_str) in enumerate(doc_inputs, 1):
+        link = link.strip() if link else ""
+        num_str = num_str.strip() if num_str else ""
+        
+        # Skip empty rows
+        if not link and not num_str:
+            continue
+        
+        # Validate that both link and num_questions are provided together
+        if link and not num_str:
+            return f"❌ Chapter Link {idx} is provided but 'Num Questions' is missing.", logs
+        
+        if not link and num_str:
+            return f"❌ 'Num Questions' is provided for Chapter Link {idx} but no link was provided.", logs
+        
+        # Validate Google Doc URL format
+        if not is_valid_gdoc_url(link):
+            return f"❌ Invalid Google Doc link format for Chapter Link {idx}. Please provide a valid Google Docs link (e.g., https://docs.google.com/document/d/YOUR_DOC_ID/edit).", logs
+        
+        # Validate number of questions
+        is_valid, n = is_valid_num_questions(num_str)
+        if not is_valid:
+            return f"❌ 'Num Questions' for Chapter Link {idx} must be a number between 1 and 30.", logs
+        
+        valid_pairs.append((link, n))
+    
+    # Check that at least one doc is provided
+    if not valid_pairs:
+        return "❌ Please provide at least one Google Doc link with a valid number of questions (1-30).", logs
+    
+    # Process all valid pairs
+    count_to_process = len(valid_pairs)
     progress(0)
-    for i, chapter in enumerate(chapters):
+    for i, (link, n) in enumerate(valid_pairs):
         try:
-            logs.append(f"📘 Processing {chapter}...")
-            spreadsheet_id = process_chapter_to_sheet(None, chapter, None, "spreadsheet")
-            logs.append(f"✅ Completed: {chapter} → Sheet ID: {spreadsheet_id}")
+            logs.append(f"📘 Processing GDoc: {link[:60]}... with {n} questions...")
+            spreadsheet_id = run_gdoc_to_spreadsheet_workflow(
+                input_doc_link=link,
+                output_spreadsheet_link=output_spreadsheet,
+                num_questions=n
+            )
+            logs.append(f"✅ Completed: Sheet ID: {spreadsheet_id}")
         except Exception as e:
-            logs.append(f"❌ Error processing {chapter}: {str(e)}")
+            logs.append(f"❌ Error processing document: {str(e)}")
         progress((i + 1) / count_to_process)
-
-    return f"✅ {len(chapters)} chapter(s) processed successfully.", logs
-
-def gdoc_input_filter(input_mode, *args):
-    gdoc_links = args[:3]
-    gdoc_num_questions = args[3:6]
-    rest = args[6:]
-    if input_mode == "Google Docs":
-        filtered = [(l, n) for l, n in zip(gdoc_links, gdoc_num_questions) if l.strip()]
-        if filtered:
-            links, nums = zip(*filtered)
-            return [input_mode, list(links), list(nums)] + list(rest)
-        else:
-            return [input_mode, [], []] + list(rest)
-    else:
-        return [input_mode, [], []] + list(rest)
+    
+    return f"✅ {len(valid_pairs)} Google Doc(s) processed successfully.", logs
 
 # ======================
 # Gradio UI
@@ -145,52 +136,47 @@ def gdoc_input_filter(input_mode, *args):
 with gr.Blocks(title="Gurukula Admin Portal") as demo:
     with gr.Tabs():
         with gr.Tab("Quiz Generator"):
-            gr.Markdown("### ✍️ Generate Quiz from Indic Story Chapters")
+            gr.Markdown("### ✍️ Generate Quiz from Google Docs")
 
-            input_mode = gr.Radio([
-                "Google Docs", "Spreadsheets"
-            ], value="Google Docs", label="Input Source")
+            with gr.Column():
+                gr.Markdown("""
+                Add up to 3 Google Doc links with their question counts, and specify a single output spreadsheet.
+                
+                **Requirements:**
+                - Each Google Doc link must start with `https://docs.google.com/document/`
+                - Number of questions must be between 1 and 30 (leave blank for default 15)
+                - Output Spreadsheet must start with `https://docs.google.com/spreadsheets/`
+                """)
+                
+                with gr.Row():
+                    gdoc_link_1 = gr.Textbox(label="Chapter Link 1", placeholder="https://docs.google.com/document/d/{DOC_ID}/edit")
+                    num_questions_1 = gr.Textbox(label="Num Questions", placeholder="15 (or leave blank)")
 
-            with gr.Column(visible=True) as gdoc_ui:
-                gdoc_links = []
-                gdoc_num_questions = []
-                for i in range(3):
-                    with gr.Row():
-                        gdoc_link = gr.Textbox(label=f"Chapter Link {i+1}", placeholder="https://docs.google.com/document/...")
-                        num_questions = gr.Textbox(label="Num Questions", placeholder="15")
-                        gdoc_links.append(gdoc_link)
-                        gdoc_num_questions.append(num_questions)
+                with gr.Row():
+                    gdoc_link_2 = gr.Textbox(label="Chapter Link 2", placeholder="https://docs.google.com/document/d/{DOC_ID}/edit")
+                    num_questions_2 = gr.Textbox(label="Num Questions", placeholder="15 (or leave blank)")
 
-            with gr.Column(visible=False) as spreadsheet_ui:
-                gr.Markdown("ℹ️ **Note:** If no specific chapters are entered, the first 6 chapters from the input spreadsheet will be processed.")
-                input_link = gr.Textbox(label="Input Spreadsheet URL", placeholder="https://docs.google.com/...")
-                output_link = gr.Textbox(label="Output Spreadsheet URL", placeholder="https://docs.google.com/...")
-                specific_chapter = gr.Textbox(label="Process Only This Chapter (Optional)")
-                chapter_list = gr.Textbox(
-                    label="List of Chapters (comma-separated) – optional but recommended (runs first 6 if left blank)", 
-                    placeholder="chapter1, chapter2"
+                with gr.Row():
+                    gdoc_link_3 = gr.Textbox(label="Chapter Link 3", placeholder="https://docs.google.com/document/d/{DOC_ID}/edit")
+                    num_questions_3 = gr.Textbox(label="Num Questions", placeholder="15 (or leave blank)")
+
+                output_spreadsheet = gr.Textbox(
+                    label="Output Spreadsheet URL (required)",
+                    placeholder="https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit",
                 )
 
-            run_button = gr.Button("Generate Quiz")
+            run_button = gr.Button("Generate Quiz", variant="primary")
             output_text = gr.Textbox(label="Status", lines=1, interactive=False)
             output_logs = gr.Textbox(label="Logs", lines=10, interactive=False)
 
-            def toggle_ui(mode):
-                return (
-                    gr.update(visible=(mode == "Google Docs")),
-                    gr.update(visible=(mode == "Spreadsheets")),
-                    "",
-                    ""
-                )
-            input_mode.change(
-                toggle_ui,
-                inputs=[input_mode],
-                outputs=[gdoc_ui, spreadsheet_ui, output_text, output_logs]
-            )
-
             run_button.click(
-                fn=lambda *args: generate_quiz(*gdoc_input_filter(*args)),
-                inputs=[input_mode, *gdoc_links, *gdoc_num_questions, input_link, output_link, specific_chapter, chapter_list],
+                fn=generate_quiz,
+                inputs=[
+                    gdoc_link_1, num_questions_1,
+                    gdoc_link_2, num_questions_2,
+                    gdoc_link_3, num_questions_3,
+                    output_spreadsheet
+                ],
                 outputs=[output_text, output_logs]
             )
 

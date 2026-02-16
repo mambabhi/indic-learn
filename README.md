@@ -39,12 +39,25 @@ You’ll need a `.env` and `app_config.yaml` file with the following (simplified
 
 ```yaml
 # app_config.yaml
+
+# NEW: Default mode configuration (recommended)
+source_documents:
+  input_link: https://docs.google.com/document/d/YOUR_DOC_ID/edit
+  output_link: https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit
+  num_questions: 15
+
+  batch:
+    - input_link: https://docs.google.com/document/d/DOC_ID_1/edit
+      output_link: https://docs.google.com/spreadsheets/d/SHEET_ID_1/edit
+      num_questions: 15
+
+# Legacy mode configuration (for backward compatibility)
 spreadsheets:
   input_name: gurukula-story-master
   output_name: gurukula-quiz-master
 
 documents:
-  link: <some_gdoc_link>
+  link: https://docs.google.com/document/d/YOUR_DOC_ID/edit
 
 chapter_question_counts:
   chapter23: 2
@@ -61,53 +74,84 @@ GOOGLE_SERVICE_ACCOUNT_KEY_BASE64=placeholder_for_base64_encoded_key
 
 🚀 **How to Generate Quizzes**
 
+**Using the main script on command line (Recommended)**
+
+For all invocations use: `quiz/backend/gurukula_quizgen.py`
+
+### **Default Mode (Recommended) - PRIMARY**
+
+The default mode reads configuration directly from `app_config.yaml`, picking up inputs, outputs, and question counts automatically. This is the simplest and recommended way to test.
+
+1. **Run with default configuration (no arguments needed):**
+
+```bash
+python -m quiz.backend.gurukula_quizgen
+```
+
+2. **Run with custom question count:**
+
+```bash
+python -m quiz.backend.gurukula_quizgen --num_questions 20
+```
+
+3. **Run batch mode (process multiple doc/sheet pairs):**
+
+```bash
+python -m quiz.backend.gurukula_quizgen --batch
+```
+
+Configure in `app_config.yaml`:
+```yaml
+source_documents:
+  input_link: https://docs.google.com/document/d/DOC_ID/edit
+  output_link: https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
+  num_questions: 15
+
+  batch:
+    - input_link: https://docs.google.com/document/d/DOC_ID_1/edit
+      output_link: https://docs.google.com/spreadsheets/d/SHEET_ID_1/edit
+      num_questions: 15
+```
+
+### **Legacy Modes (Backward Compatible)**
+
+4. **Run a single chapter from file:**
+
+```bash
+python -m quiz.backend.gurukula_quizgen --mode file --chapter chapter23
+```
+
+5. **Run all chapters in batch from file:**
+
+```bash
+python -m quiz.backend.gurukula_quizgen --mode file
+```
+
+6. **Run a single chapter from Google Sheets:**
+
+```bash
+python -m quiz.backend.gurukula_quizgen --mode spreadsheet --chapter chapter23
+```
+
+7. **Run from Google Sheets (all tabs):**
+
+```bash
+python -m quiz.backend.gurukula_quizgen --mode spreadsheet
+```
+
+📖 **For detailed testing instructions, see**: `quiz/backend/TESTING_DEFAULT_MODE.md`
+📚 **For complete developer guide, see**: `quiz/backend/CLAUDE.md`
+
+---
+
 **Using the Hugging Face Spaces Web UI**
 
 - Launch the URL: https://huggingface.co/spaces/mambabhi/indic-learn (for local testing use the `app.py` file).
-- Upload or specify your input spreadsheet (with chapters).
-- Specify the output spreadsheet where generated quizzes will be written automatically.
+- The web UI provides an interactive interface for quiz generation.
 - Monitor progress and logs directly in the UI.
 
-**Using the main script on command line**
-
-For all invocations use: `backend/gurukula_quizgen.py`
-
-1. **Run a single chapter from file:**
-
-```bash
-python -m quiz.backend.gurukula_quizgen --input_source file --chapter chapter23
-```
-
-2. **Run all chapters in batch from file:**
-
-```bash
-python -m quiz.backend.gurukula_quizgen --input_source file
-```
-
-3. **Run a single chapter from Google Sheets:**
-
-```bash
-python -m quiz.backend.gurukula_quizgen --input_source spreadsheet --chapter chapter23
-```
-
-4. **Run from Google Sheets (single or multiple tabs):**
-
-```bash
-python -m quiz.backend.gurukula_quizgen --input_source spreadsheet
-```
-
-5. **Run from Google Docs (single or multiple) without chapter:**
-
-```bash
-python -m quiz.backend.gurukula_quizgen --input_source gdoc
-```
-
-6. **Run from Google Docs (single or multiple) with chapter:**
-
-```bash
-python -m quiz.backend.gurukula_quizgen --input_source gdoc --chapter chapter23
-```
 ---
+
 🧾 **Input Doc Format (`gurukula-story-master`)**
 
 This can be any Google doc with a proper Chapter title which will be used to create a tab in the output quiz-master spreadsheet below.
@@ -157,24 +201,18 @@ Each chapter should be a separate tab. The layout within a tab should look like:
 <br/>
 <i>Figure 3: Generated quiz questions with highlights in output sheet.</i>
 
-### ✅ Hugging Face Spaces UI for Quiz Generation (GDoc)
+### ✅ Hugging Face Spaces UI for Quiz Generation
 
-<img width="489" height="802" alt="Image" src="https://github.com/user-attachments/assets/cfe695b1-78a9-4093-8406-877f182949ea" />
+<img width="1218" height="718" alt="Image" src="https://github.com/user-attachments/assets/b7481d33-97d9-488d-88f9-12ebadca1737" />
 <br/>
-<i>Figure 4: Hugging Face Spaces UI—upload your GDOC. The UI triggers quiz generation and updates the gurukula-quiz-master output sheet automatically.</i>
-
-### ✅ Hugging Face Spaces UI for Quiz Generation (Spreadsheet)
-
-<img width="489" height="802" alt="Image" src="https://github.com/user-attachments/assets/f60cfdf8-bc5c-4811-a933-1f30059f45b3" />
-<br/>
-<i>Figure 5: Hugging Face Spaces UI—upload your input spreadsheet and specify the output spreadsheet. The UI triggers quiz generation and updates the output sheet automatically.</i>
+<i>Figure 4: Hugging Face Spaces UI for interactive quiz generation and management.</i>
 
 ### ✅ Final Quiz in Gurukula App
 
 ![Image](https://github.com/user-attachments/assets/373d4ec6-e549-472b-978a-4450e6cd9a50)
 
 <br/>
-<i>Figure 3: Gurukula app displaying quiz in interactive mode.</i>
+<i>Figure 5: Gurukula app displaying quiz in interactive mode.</i>
 
 ---
 
